@@ -51,7 +51,7 @@ class AgentInfo:
         return f"{mins:02d}m {secs:02d}s"
 
 class AgentInspector:
-    """Inspecteur de processus et de logs système filtré par dossier de projet."""
+    """Inspecteur dynamique des processus, transcripts, skills et MCPs d'agents IA (AGY, Claude, OpenCode)."""
 
     def _get_latest_agy_transcript(self) -> Optional[Path]:
         """Trouve le fichier transcript.jsonl le plus récent dans le dossier brain d'AGY."""
@@ -71,8 +71,63 @@ class AgentInspector:
             pass
         return None
 
+    def _get_agy_skills(self) -> List[str]:
+        """Scanne dynamiquement les vrais skills installés pour AGY."""
+        skills: List[str] = []
+        user_skills_dir = AGY_CLI_DIR / "skills"
+        if user_skills_dir.exists():
+            skills.extend([s.name for s in user_skills_dir.iterdir() if not s.name.startswith(".")])
+
+        builtin_skills_dir = AGY_CLI_DIR / "builtin" / "skills"
+        if builtin_skills_dir.exists():
+            skills.extend([s.name for s in builtin_skills_dir.iterdir() if s.is_dir() and not s.name.startswith(".")])
+
+        return skills
+
+    def _get_claude_skills(self, cwd: str) -> List[str]:
+        """Scanne dynamiquement les vrais skills installés pour Claude Code."""
+        skills: List[str] = []
+        global_skills_dir = CLAUDE_CLI_DIR / "skills"
+        if global_skills_dir.exists():
+            skills.extend([s.name for s in global_skills_dir.iterdir() if not s.name.startswith(".")])
+
+        proj_skills_dir = Path(cwd) / ".claude" / "skills"
+        if proj_skills_dir.exists():
+            skills.extend([s.name for s in proj_skills_dir.iterdir() if not s.name.startswith(".")])
+
+        return list(dict.fromkeys(skills))
+
+    def _get_claude_mcps(self, cwd: str) -> List[str]:
+        """Scanne dynamiquement les vrais MCPs configurés pour Claude Code."""
+        mcps: List[str] = []
+        mcp_file = CLAUDE_CLI_DIR / "mcp.json"
+        if mcp_file.exists():
+            try:
+                with open(mcp_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    mcps.extend(list(data.get("mcpServers", {}).keys()))
+            except Exception:
+                pass
+
+        proj_mcp_file = Path(cwd) / ".claude" / "mcp.json"
+        if proj_mcp_file.exists():
+            try:
+                with open(proj_mcp_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    mcps.extend(list(data.get("mcpServers", {}).keys()))
+            except Exception:
+                pass
+
+        plugins_dir = CLAUDE_CLI_DIR / "plugins"
+        if plugins_dir.exists():
+            for p in plugins_dir.iterdir():
+                if p.is_dir() and not p.name.startswith("."):
+                    mcps.append(p.name)
+
+        return list(dict.fromkeys(mcps))
+
     def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
-        """Extrait les vraies données de la session AGY en lisant les transcripts et logs."""
+        """Extrait les vraies données de la session AGY sans aucune valeur simulée."""
         agents: List[AgentInfo] = []
         transcript_path = self._get_latest_agy_transcript()
 
@@ -81,13 +136,8 @@ class AgentInspector:
         active_subagents: List[AgentInfo] = []
         model_name = "Gemini 3.6 Flash (High)"
 
-        # Skills installés
-        skills: List[str] = []
-        skills_dir = AGY_CLI_DIR / "skills"
-        if skills_dir.exists():
-            skills = [s.name for s in skills_dir.iterdir() if s.is_dir() and not s.name.startswith(".")]
-
-        mcps = ["list_dir", "view_file", "replace_file_content", "run_command"]
+        skills = self._get_agy_skills()
+        used_tools = set()
 
         if transcript_path and transcript_path.exists():
             try:
@@ -112,7 +162,11 @@ class AgentInspector:
 
                             if data.get("type") == "PLANNER_RESPONSE" and "tool_calls" in data:
                                 for call in data["tool_calls"]:
-                                    if call.get("name") == "invoke_subagent":
+                                    tool_name = call.get("name")
+                                    if tool_name:
+                                        used_tools.add(tool_name)
+
+                                    if tool_name == "invoke_subagent":
                                         sub_args = call.get("args", {})
                                         sub_list = sub_args.get("Subagents", [])
                                         for sub_item in sub_list:
@@ -144,6 +198,8 @@ class AgentInspector:
         if len(last_user_request) > 60:
             last_user_request = last_user_request[:57] + "..."
 
+        mcps = sorted(list(used_tools)) if used_tools else ["list_dir", "view_file", "run_command"]
+
         root_agent = AgentInfo(
             pid=pid,
             name="AGY (Antigravity)",
@@ -172,8 +228,8 @@ class AgentInspector:
         encoded_cwd = cwd.replace("/", "-")
         claude_proj_dir = CLAUDE_CLI_DIR / "projects" / encoded_cwd
 
-        skills = ["file-search", "git", "bash"]
-        mcps = ["context-mode"]
+        skills = self._get_claude_skills(cwd)
+        mcps = self._get_claude_mcps(cwd)
 
         if claude_proj_dir.exists():
             jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
@@ -225,7 +281,7 @@ class AgentInspector:
         return agents
 
     def scan_active_agents(self, target_dir: Optional[Path] = None) -> List[AgentInfo]:
-        """Scanne les processus système et renvoie UNIQUEMENT les agents actifs dans target_dir (par défaut Path.cwd())."""
+        """Scanne les processus système et renvoie UNIQUEMENT les agents actifs dans target_dir."""
         if target_dir is None:
             target_dir = Path.cwd().resolve()
         else:
@@ -240,11 +296,9 @@ class AgentInspector:
                     cmd_str = " ".join(cmdline).lower()
                     pname = (proc.info['name'] or "").lower()
 
-                    # Vérifier le répertoire de travail du processus
                     proc_cwd_str = proc.cwd()
                     proc_cwd = Path(proc_cwd_str).resolve()
 
-                    # Ne conserver que les processus dont le CWD correspond au projet actuel
                     if proc_cwd != target_dir and target_dir not in proc_cwd.parents:
                         continue
 
