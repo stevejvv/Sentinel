@@ -82,20 +82,27 @@ class AgentInspector:
         if builtin_skills_dir.exists():
             skills.extend([s.name for s in builtin_skills_dir.iterdir() if s.is_dir() and not s.name.startswith(".")])
 
-        return skills
+        return list(dict.fromkeys(skills))
 
     def _get_claude_skills(self, cwd: str) -> List[str]:
         """Scanne dynamiquement les vrais skills installés pour Claude Code."""
-        skills: List[str] = []
+        raw_skills: List[str] = []
         global_skills_dir = CLAUDE_CLI_DIR / "skills"
         if global_skills_dir.exists():
-            skills.extend([s.name for s in global_skills_dir.iterdir() if not s.name.startswith(".")])
+            raw_skills.extend([s.name for s in global_skills_dir.iterdir() if not s.name.startswith(".")])
 
         proj_skills_dir = Path(cwd) / ".claude" / "skills"
         if proj_skills_dir.exists():
-            skills.extend([s.name for s in proj_skills_dir.iterdir() if not s.name.startswith(".")])
+            raw_skills.extend([s.name for s in proj_skills_dir.iterdir() if not s.name.startswith(".")])
 
-        return list(dict.fromkeys(skills))
+        # Normaliser / dédupliquer les préfixes de sous-skills (ex: caveman-help -> caveman)
+        cleaned_skills = []
+        for s in raw_skills:
+            base_name = s.split("-")[0] if "-" in s else s
+            if base_name not in cleaned_skills:
+                cleaned_skills.append(base_name)
+
+        return cleaned_skills if cleaned_skills else raw_skills
 
     def _get_claude_mcps(self, cwd: str) -> List[str]:
         """Scanne dynamiquement les vrais MCPs configurés pour Claude Code."""
@@ -127,7 +134,7 @@ class AgentInspector:
         return list(dict.fromkeys(mcps))
 
     def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
-        """Extrait les vraies données de la session AGY sans aucune valeur simulée."""
+        """Extrait les vraies données de la session AGY."""
         agents: List[AgentInfo] = []
         transcript_path = self._get_latest_agy_transcript()
 
@@ -220,47 +227,80 @@ class AgentInspector:
         return agents
 
     def _parse_claude_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
-        """Extrait les vraies données d'une session Claude Code pour un répertoire spécifique."""
+        """Extrait les vraies données de contexte, skills et MCPs d'une session Claude Code."""
         agents: List[AgentInfo] = []
         last_user_request = "Active CLI Session"
-        estimated_tokens = 15000
+        input_tokens = 0
+        output_tokens = 0
+        used_tools = set()
 
         encoded_cwd = cwd.replace("/", "-")
         claude_proj_dir = CLAUDE_CLI_DIR / "projects" / encoded_cwd
 
         skills = self._get_claude_skills(cwd)
-        mcps = self._get_claude_mcps(cwd)
+        configured_mcps = self._get_claude_mcps(cwd)
 
         if claude_proj_dir.exists():
             jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
             if jsonl_files:
                 latest_jsonl = max(jsonl_files, key=lambda p: p.stat().st_mtime)
-                estimated_tokens = max(3000, latest_jsonl.stat().st_size // 4)
                 try:
                     with open(latest_jsonl, "r", encoding="utf-8") as f:
-                        lines = [l for l in f if l.strip()]
-                        for l in reversed(lines):
+                        for line in f:
+                            if not line.strip():
+                                continue
                             try:
-                                data = json.loads(l)
+                                data = json.loads(line)
+                                # Extraire le prompt utilisateur
                                 if data.get("type") == "user" and "message" in data:
                                     content = data["message"].get("content", "")
                                     if isinstance(content, str) and content.strip():
-                                        last_user_request = content.strip().split("\n")[0]
-                                        break
-                                    elif isinstance(content, list) and content:
+                                        txt = content.strip()
+                                        if "<command-message>" in txt:
+                                            s = txt.find("<command-message>") + len("<command-message>")
+                                            e = txt.find("</command-message>")
+                                            if e > s:
+                                                txt = txt[s:e]
+                                        if not txt.startswith("Base directory"):
+                                            last_user_request = txt.split("\n")[0]
+                                    elif isinstance(content, list):
                                         for item in content:
                                             if isinstance(item, dict) and item.get("type") == "text":
-                                                last_user_request = item.get("text", "").strip().split("\n")[0]
-                                                break
-                                        if last_user_request != "Active CLI Session":
-                                            break
+                                                txt = item.get("text", "").strip()
+                                                if txt and not txt.startswith("Base directory"):
+                                                    last_user_request = txt.split("\n")[0]
+                                                    break
+
+                                # Extraire les tokens d'assistant et les outils engagés
+                                if data.get("type") == "assistant" and "message" in data:
+                                    msg = data["message"]
+                                    usage = msg.get("usage", {})
+                                    if usage.get("input_tokens"):
+                                        input_tokens = max(input_tokens, usage.get("input_tokens", 0))
+                                    output_tokens += usage.get("output_tokens", 0)
+
+                                    for item in msg.get("content", []):
+                                        if isinstance(item, dict) and item.get("type") == "tool_use":
+                                            used_tools.add(item.get("name"))
                             except Exception:
                                 continue
                 except Exception:
                     pass
 
+        total_context_tokens = input_tokens + output_tokens
+        if total_context_tokens == 0:
+            # Fallback direct basé sur la taille du fichier si les tokens ne sont pas dans le JSONL
+            if claude_proj_dir.exists():
+                jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
+                if jsonl_files:
+                    total_context_tokens = max(1000, max(f.stat().st_size for f in jsonl_files) // 4)
+            else:
+                total_context_tokens = 5000
+
         if len(last_user_request) > 60:
             last_user_request = last_user_request[:57] + "..."
+
+        mcps = list(dict.fromkeys(configured_mcps + sorted(list(used_tools))))
 
         claude_root = AgentInfo(
             pid=pid,
@@ -270,7 +310,7 @@ class AgentInspector:
             action=last_user_request,
             elapsed_seconds=elapsed_seconds,
             remaining_time="~02m 00s",
-            context_used=estimated_tokens,
+            context_used=total_context_tokens,
             context_max=200000,
             skills=skills,
             mcps=mcps,
@@ -281,13 +321,14 @@ class AgentInspector:
         return agents
 
     def scan_active_agents(self, target_dir: Optional[Path] = None) -> List[AgentInfo]:
-        """Scanne les processus système et renvoie UNIQUEMENT les agents actifs dans target_dir."""
+        """Scanne les processus système et renvoie UNIQUEMENT les agents actifs dans target_dir sans doublons."""
         if target_dir is None:
             target_dir = Path.cwd().resolve()
         else:
             target_dir = Path(target_dir).resolve()
 
         active_agents: List[AgentInfo] = []
+        seen_agent_types = set()
 
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
@@ -302,17 +343,23 @@ class AgentInspector:
                     if proc_cwd != target_dir and target_dir not in proc_cwd.parents:
                         continue
 
+                    # Ignorer les sous-processus python/node secondaires de Claude ou AGY
+                    if (pname == "python" or pname == "python3" or pname == "node") and ("claude" not in cmd_str and "agy" not in cmd_str):
+                        continue
+
                     elapsed = time.time() - proc.info['create_time']
 
-                    if "antigravity" in cmd_str or "agy" in cmd_str:
+                    if ("antigravity" in cmd_str or "agy" in cmd_str) and "agy" not in seen_agent_types:
                         parsed = self._parse_agy_session(proc.info['pid'], elapsed, str(proc_cwd))
                         if parsed:
                             active_agents.extend(parsed)
+                            seen_agent_types.add("agy")
 
-                    elif "claude" in cmd_str or "claude" in pname:
+                    elif ("claude" in cmd_str or "claude" in pname) and "claude" not in seen_agent_types:
                         parsed = self._parse_claude_session(proc.info['pid'], elapsed, str(proc_cwd))
                         if parsed:
                             active_agents.extend(parsed)
+                            seen_agent_types.add("claude")
 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
