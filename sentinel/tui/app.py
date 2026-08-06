@@ -122,13 +122,11 @@ class RootAgentPane(Static):
             container.mount(Label(f" └─ Active MCPs: [dim]{mcps_str}[/dim]\n"))
 
         if sub_agents:
-            container.mount(Label(" └─ ❯ SUB-AGENTS"))
+            container.mount(Label(" └─ > SUB-AGENTS"))
             for sub in sub_agents:
-                container.mount(Label(f"    [bold success][RUNNING][/bold success] [bold white]{sub.name}[/bold white]"))
-                container.mount(Label(f"    ├─ Model: [cyan]{sub.model}[/cyan]"))
+                container.mount(Label(f"    [bold success][RUNNING][/bold success] [bold white]{sub.name}[/bold white] [dim]({sub.model})[/dim]"))
                 container.mount(Label(f"    ├─ Action: [dim]{sub.action}[/dim]"))
-                container.mount(Label(f"    ├─ Remaining Time: [bold success]{sub.remaining_time}[/bold success]"))
-                container.mount(Label(f"    └─ Tokens Used: [bold primary]{sub.context_used // 1000}k[/bold primary] [dim]({sub.context_percent}%)[/dim]"))
+                container.mount(Label(f"    └─ Tokens: [bold primary]{sub.context_used // 1000}k[/bold primary] [dim]({sub.context_percent}%)[/dim]"))
 
 class GitStatusPane(Static):
     """Statut Git épuré."""

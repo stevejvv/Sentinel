@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import psutil
@@ -150,22 +151,25 @@ class AgentInspector:
         return list(dict.fromkeys(mcps))
 
     def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
-        """Extrait les vraies données de la session AGY sans aucune valeur stimulée."""
+        """Extrait les vraies données de la session AGY sans aucune valeur simulée."""
         agents: List[AgentInfo] = []
         transcript_path = self._get_latest_agy_transcript()
 
         last_user_request = "Session active"
         estimated_tokens = 0
-        active_subagents: List[AgentInfo] = []
         model_name = "Gemini 3.6 Flash (High)"
 
         skills = self._get_agy_skills()
         used_tools = set()
+        subagent_conv_ids: Dict[str, Dict[str, str]] = {}
 
         if transcript_path and transcript_path.exists():
             try:
                 file_size = transcript_path.stat().st_size
                 estimated_tokens = file_size // 4
+
+                # Track pending subagent metadata from invoke_subagent calls
+                pending_sub_meta: List[Dict[str, str]] = []
 
                 with open(transcript_path, "r", encoding="utf-8") as f:
                     for line in f:
@@ -192,27 +196,27 @@ class AgentInspector:
                                     if tool_name == "invoke_subagent":
                                         sub_args = call.get("args", {})
                                         sub_list = sub_args.get("Subagents", [])
+                                        if isinstance(sub_list, str):
+                                            try:
+                                                sub_list = json.loads(sub_list)
+                                            except Exception:
+                                                sub_list = []
                                         for sub_item in sub_list:
-                                            sub_role = sub_item.get("Role", "Sub-Agent")
-                                            sub_model = sub_item.get("Model", "Gemini Flash")
-                                            sub_prompt = sub_item.get("Prompt", "Executing subtask")
-                                            active_subagents.append(
-                                                AgentInfo(
-                                                    pid=pid + 1,
-                                                    name=sub_role,
-                                                    role="Sub-Agent",
-                                                    model=sub_model,
-                                                    action=sub_prompt[:40] + "..." if len(sub_prompt) > 40 else sub_prompt,
-                                                    elapsed_seconds=30.0,
-                                                    remaining_time="~00m 45s",
-                                                    context_used=12000,
-                                                    context_max=200000,
-                                                    skills=[],
-                                                    mcps=["view_file"],
-                                                    is_subagent=True,
-                                                    cwd=cwd
-                                                )
-                                            )
+                                            pending_sub_meta.append({
+                                                "role": sub_item.get("Role", "Sub-Agent"),
+                                                "model": sub_item.get("Model", "inherit"),
+                                                "prompt": sub_item.get("Prompt", ""),
+                                            })
+
+                            # INVOKE_SUBAGENT steps contain the conversationId in their content
+                            if data.get("type") == "INVOKE_SUBAGENT" and "content" in data:
+                                content = data["content"]
+                                conv_match = re.search(r'"conversationId"\s*:\s*"([a-f0-9-]+)"', content)
+                                if conv_match:
+                                    conv_id = conv_match.group(1)
+                                    meta = pending_sub_meta.pop(0) if pending_sub_meta else {"role": "Sub-Agent", "model": "inherit", "prompt": ""}
+                                    subagent_conv_ids[conv_id] = meta
+
                         except Exception:
                             continue
             except Exception:
@@ -221,7 +225,7 @@ class AgentInspector:
         if len(last_user_request) > 60:
             last_user_request = last_user_request[:57] + "..."
 
-        mcps = sorted(list(used_tools)) if used_tools else ["list_dir", "view_file", "run_command"]
+        mcps = sorted(list(used_tools)) if used_tools else []
 
         root_agent = AgentInfo(
             pid=pid,
@@ -230,7 +234,7 @@ class AgentInspector:
             model=model_name,
             action=last_user_request,
             elapsed_seconds=elapsed_seconds,
-            remaining_time="~01m 20s",
+            remaining_time="",
             context_used=estimated_tokens,
             context_max=200000,
             skills=skills,
@@ -239,8 +243,76 @@ class AgentInspector:
             cwd=cwd
         )
         agents.append(root_agent)
-        agents.extend(active_subagents)
+
+        # Detect truly active subagents by checking their transcript freshness
+        active_subs = self._detect_active_subagents(subagent_conv_ids, pid, cwd)
+        agents.extend(active_subs)
+
         return agents
+
+    def _detect_active_subagents(self, conv_ids: Dict[str, Dict[str, str]], parent_pid: int, cwd: str) -> List[AgentInfo]:
+        """Détecte les sub-agents réellement actifs en vérifiant la fraîcheur de leur transcript."""
+        active: List[AgentInfo] = []
+        now = time.time()
+
+        for conv_id, meta in conv_ids.items():
+            transcript = AGY_CLI_DIR / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
+            if not transcript.exists():
+                continue
+
+            # Sub-agent is active if its transcript was modified in the last 30 seconds
+            mtime = transcript.stat().st_mtime
+            if now - mtime > 30:
+                continue
+
+            sub_action = "Executing subtask"
+            sub_tokens = 0
+            sub_model = meta.get("model", "inherit")
+            sub_role = meta.get("role", "Sub-Agent")
+
+            try:
+                sub_tokens = transcript.stat().st_size // 4
+                with open(transcript, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            data = json.loads(line)
+                            # Get the subagent's assigned task from the first USER_INPUT
+                            if data.get("type") == "USER_INPUT" and "content" in data:
+                                raw = data["content"].strip().split("\n")[0]
+                                if len(raw) > 40:
+                                    raw = raw[:37] + "..."
+                                sub_action = raw
+                            # Try to get the model from settings
+                            if data.get("type") == "PLANNER_RESPONSE" and data.get("model"):
+                                sub_model = data["model"]
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+            if sub_model == "inherit":
+                sub_model = "Gemini Flash"
+
+            elapsed = now - mtime
+            active.append(AgentInfo(
+                pid=parent_pid + len(active) + 1,
+                name=sub_role,
+                role="Sub-Agent",
+                model=sub_model,
+                action=sub_action,
+                elapsed_seconds=elapsed,
+                remaining_time="",
+                context_used=sub_tokens,
+                context_max=200000,
+                skills=[],
+                mcps=[],
+                is_subagent=True,
+                cwd=cwd
+            ))
+
+        return active
 
     def _parse_claude_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
         """Extrait les vraies données de contexte, skills et MCPs d'une session Claude Code."""
