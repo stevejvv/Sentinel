@@ -55,5 +55,12 @@ def summary():
     console.print("[bold yellow]📜 Génération du rapport de session Markdown...[/bold yellow]")
     console.print("[green]✅ Rapport sauvegardé sous `sentinel_session_summary.md`[/green]")
 
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    """🛡️ Sentinel CLI — Terminal AI Watchdog, Security Guard & Token Optimization Dashboard"""
+    if ctx.invoked_subcommand is None:
+        run()
+
 if __name__ == "__main__":
     app()
+
