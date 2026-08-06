@@ -54,27 +54,19 @@ class AgentInfo:
 class AgentInspector:
     """Inspecteur dynamique des processus, transcripts, skills et MCPs d'agents IA (AGY, Claude, OpenCode)."""
 
-    def _get_latest_agy_transcript(self) -> Optional[Path]:
-        """Trouve le fichier transcript.jsonl le plus récent parmi les sessions actives d'AGY."""
+    def _get_active_agy_transcripts(self) -> List[Path]:
+        """Retourne la liste des transcripts AGY actifs triée du plus récent au plus ancien."""
+        active_transcripts = []
         try:
             presence_locks = list((AGY_CLI_DIR / "presence").glob("*.lock"))
-            if presence_locks:
-                active_transcripts = []
-                for lock in presence_locks:
-                    conv_id = lock.stem
-                    t_path = AGY_CLI_DIR / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
-                    if t_path.exists():
-                        active_transcripts.append(t_path)
-                
-                if active_transcripts:
-                    return max(active_transcripts, key=lambda p: p.stat().st_mtime)
-
-            transcripts = list((AGY_CLI_DIR / "brain").glob("*/.system_generated/logs/transcript.jsonl"))
-            if transcripts:
-                return max(transcripts, key=lambda p: p.stat().st_mtime)
+            for lock in presence_locks:
+                conv_id = lock.stem
+                t_path = AGY_CLI_DIR / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
+                if t_path.exists():
+                    active_transcripts.append(t_path)
         except Exception:
             pass
-        return None
+        return sorted(active_transcripts, key=lambda p: p.stat().st_mtime, reverse=True)
 
     def _find_claude_project_dir(self, cwd: str) -> Optional[Path]:
         """Trouve le dossier de projet Claude correspondant au répertoire courant."""
@@ -154,14 +146,13 @@ class AgentInspector:
 
         return list(dict.fromkeys(mcps))
 
-    def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
+    def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str, transcript_path: Optional[Path] = None) -> List[AgentInfo]:
         """Extrait les vraies données de la session AGY sans aucune valeur simulée."""
         agents: List[AgentInfo] = []
-        transcript_path = self._get_latest_agy_transcript()
 
         last_user_request = "Session active"
         estimated_tokens = 0
-        model_name = "Gemini 3.6 Flash (High)"
+        model_name = "Gemini Flash"
 
         skills = self._get_agy_skills()
         used_tools = set()
@@ -190,6 +181,12 @@ class AgentInspector:
                                         last_user_request = raw_content[start:end].strip().split("\n")[0]
                                 else:
                                     last_user_request = raw_content.strip().split("\n")[0]
+                                    
+                                if "USER_SETTINGS_CHANGE" in raw_content:
+                                    import re
+                                    match = re.search(r"setting `Model Selection` from .*? to (.*?)\.", raw_content)
+                                    if match:
+                                        model_name = match.group(1).strip()
 
                             if data.get("type") == "PLANNER_RESPONSE" and "tool_calls" in data:
                                 for call in data["tool_calls"]:
@@ -240,7 +237,7 @@ class AgentInspector:
             elapsed_seconds=elapsed_seconds,
             remaining_time="",
             context_used=estimated_tokens,
-            context_max=200000,
+            context_max=1000000,
             skills=skills,
             mcps=mcps,
             is_subagent=False,
@@ -405,7 +402,7 @@ class AgentInspector:
             elapsed_seconds=elapsed_seconds,
             remaining_time="~02m 00s",
             context_used=total_context_tokens,
-            context_max=200000,
+            context_max=1000000,
             skills=skills,
             mcps=mcps,
             is_subagent=False,
@@ -422,7 +419,10 @@ class AgentInspector:
             target_dir = Path(target_dir).resolve()
 
         active_agents: List[AgentInfo] = []
-        seen_agent_types = set()
+        seen_claude_cwds = set()
+        
+        agy_active_transcripts = self._get_active_agy_transcripts()
+        agy_idx = 0
 
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
@@ -442,17 +442,20 @@ class AgentInspector:
 
                     elapsed = time.time() - proc.info['create_time']
 
-                    if ("antigravity" in cmd_str or "agy" in cmd_str) and "agy" not in seen_agent_types:
-                        parsed = self._parse_agy_session(proc.info['pid'], elapsed, str(proc_cwd))
+                    if ("antigravity" in cmd_str or "agy" in cmd_str):
+                        # Use the next available transcript for this AGY process
+                        t_path = agy_active_transcripts[agy_idx] if agy_idx < len(agy_active_transcripts) else None
+                        parsed = self._parse_agy_session(proc.info['pid'], elapsed, str(proc_cwd), t_path)
                         if parsed:
                             active_agents.extend(parsed)
-                            seen_agent_types.add("agy")
+                            agy_idx += 1
 
-                    elif ("claude" in cmd_str or "claude" in pname) and "claude" not in seen_agent_types:
-                        parsed = self._parse_claude_session(proc.info['pid'], elapsed, str(proc_cwd))
-                        if parsed:
-                            active_agents.extend(parsed)
-                            seen_agent_types.add("claude")
+                    elif ("claude" in cmd_str or "claude" in pname):
+                        if str(proc_cwd) not in seen_claude_cwds:
+                            parsed = self._parse_claude_session(proc.info['pid'], elapsed, str(proc_cwd))
+                            if parsed:
+                                active_agents.extend(parsed)
+                                seen_claude_cwds.add(str(proc_cwd))
 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue

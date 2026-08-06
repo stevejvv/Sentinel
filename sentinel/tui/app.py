@@ -224,7 +224,6 @@ class SentinelApp(App):
 
     RootAgentPane {
         height: auto;
-        max-height: 50%;
         padding: 0 2;
         border-left: solid $panel;
         margin: 1 2 0 2;
