@@ -280,7 +280,16 @@ class AgentInspector:
                             data = json.loads(line)
                             # Get the subagent's assigned task from the first USER_INPUT
                             if data.get("type") == "USER_INPUT" and "content" in data:
-                                raw = data["content"].strip().split("\n")[0]
+                                raw_content = data["content"]
+                                if "<USER_REQUEST>" in raw_content:
+                                    start = raw_content.find("<USER_REQUEST>") + len("<USER_REQUEST>")
+                                    end = raw_content.find("</USER_REQUEST>")
+                                    if end > start:
+                                        raw = raw_content[start:end].strip().split("\n")[0]
+                                    else:
+                                        raw = raw_content.strip().split("\n")[0]
+                                else:
+                                    raw = raw_content.strip().split("\n")[0]
                                 if len(raw) > 40:
                                     raw = raw[:37] + "..."
                                 sub_action = raw
