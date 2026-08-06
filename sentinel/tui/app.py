@@ -88,44 +88,41 @@ class TopStatusBanner(Static):
     def compose(self) -> ComposeResult:
         yield Label("[bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
 
-class AgentCard(Static):
-    """Ligne d'agent minimaliste sans émojis."""
-    def __init__(self, agent_name: str, role: str, action: str, elapsed: str, status: str = "running", **kwargs):
-        super().__init__(**kwargs)
-        self.agent_name = agent_name
-        self.role = role
-        self.action = action
-        self.elapsed = elapsed
-        self.status = status
-
+class RootAgentPane(Static):
+    """Regroupement d'un agent racine et de ses sub-agents avec contexte et skills."""
     def compose(self) -> ComposeResult:
-        status_tag = "[bold success][RUNNING][/bold success]" if self.status == "running" else "[bold warning][WAIT][/bold warning]"
-        yield Label(f"{status_tag} [bold white]{self.agent_name}[/bold white] [dim]({self.role})[/dim]")
-        yield Label(f"   [dim]└─[/dim] Action: [bold primary]{self.action}[/bold primary]")
-        yield Label(f"   [dim]└─ Elapsed:[/dim] [bold success]{self.elapsed}[/bold success]  │  [dim]MCPs:[/dim] [yellow]sqlite, github[/yellow]")
+        yield Label("❯ AGENT ORCHESTRATION & SESSION HEALTH", classes="pane-title")
+        
+        # Agent Racine
+        yield Label("[bold success][RUNNING][/bold success] [bold white]Claude Code[/bold white] [dim](Root Agent)[/dim]")
+        yield Label("   [dim]└─ Action:[/dim] [bold primary]Refactoring src/engine/board.py[/bold primary]  │  [dim]Elapsed:[/dim] [success]04m 12s[/success]")
+        yield Label("   [dim]└─ Context:[/dim] [bold primary]68%[/bold primary] [dim](136k / 200k tokens)[/dim]  │  [yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended")
+        pb1 = ProgressBar(total=100, show_eta=False, id="ctx-root")
+        pb1.progress = 68
+        yield pb1
+        yield Label("   [dim]└─ Skills & MCPs:[/dim] local-file-picker [bold success][ON][/bold success]  │  ast-grep [dim][OFF][/dim]  │  sqlite [bold success][ON][/bold success]\n")
 
-class TokenGauges(Static):
-    """Panneau de contexte minimaliste sans émojis."""
-    def compose(self) -> ComposeResult:
-        yield Label("❯ CONTEXT & TOKENS", classes="pane-title")
-        yield Label("Context Window: [bold primary]68%[/bold primary] [dim](136k / 200k tokens)[/dim]")
-        pb = ProgressBar(total=100, show_eta=False, id="context-bar")
-        pb.progress = 68
-        yield pb
-        yield Label("Session Cost: [bold success]$0.42[/bold success] [dim](48k in, 4k out)[/dim]")
-        yield Label("[yellow][WARN][/yellow] Recommendation: Run [bold primary]/compact[/bold primary]")
+        # Sub-Agent dépendant
+        yield Label("   [dim]└─ ❯[/dim] [bold success][RUNNING][/bold success] [bold white]agy[/bold white] [dim](Sub-agent: Gemini 3.6 Flash)[/dim]")
+        yield Label("      [dim]└─ Action:[/dim] [bold primary]Writing unit tests for movegen.py[/bold primary]  │  [dim]Elapsed:[/dim] [success]01m 45s[/success]")
+        yield Label("      [dim]└─ Context:[/dim] [bold primary]24%[/bold primary] [dim](48k / 200k tokens)[/dim]")
+        pb2 = ProgressBar(total=100, show_eta=False, id="ctx-sub")
+        pb2.progress = 24
+        yield pb2
+        yield Label("      [dim]└─ Skills & MCPs:[/dim] pytest-runner [bold success][ON][/bold success]  │  playwright [dim][OFF][/dim]")
 
 class GitStatusPane(Static):
-    """Statut Git sans émojis."""
+    """Statut Git épuré."""
     def compose(self) -> ComposeResult:
         yield Label("❯ VERSION CONTROL (Git)", classes="pane-title")
         yield Label("Branch: [bold primary]main[/bold primary]  │  [yellow]3 Modified[/yellow]")
-        yield Label("Diff: [bold success]+142[/bold success] [bold error]-38[/bold error] lines")
+        yield Label("Diff: [bold success]+142[/bold success] [bold error]-38[/bold error] lines\n")
         yield Label("src/engine/board.py       [success]+98[/success] [error]-12[/error]")
         yield Label("tests/test_forcing.py     [success]+44[/success] [error]-26[/error]")
+        yield Label("include/bitboard.hpp      [dim]+0 -0[/dim]")
 
 class SecurityAuditPane(Static):
-    """Audit de sécurité sans émojis."""
+    """Audit de sécurité épuré."""
     def compose(self) -> ComposeResult:
         yield Label("❯ SECURITY & AUDIT", classes="pane-title")
         yield Label("[success][OK][/success] src/engine/board.py [dim]Clean[/dim]")
@@ -133,29 +130,31 @@ class SecurityAuditPane(Static):
         yield Label("[success][OK][/success] Secrets Scanner: [dim]No API keys leaked[/dim]")
 
 class TestPerfPane(Static):
-    """Métriques de tests et perf sans émojis."""
+    """Métriques de tests et perf épurées."""
     def compose(self) -> ComposeResult:
         yield Label("❯ TESTS & PERFORMANCE", classes="pane-title")
         yield Label("Build: [bold success][PASS] GCC 14 -O3[/bold success]")
         yield Label("Tests: [bold success][PASS] 142/142 Passed[/bold success]")
         yield Label("Speed: [bold primary]14.8M NPS[/bold primary] [success](+4.2%)[/success]")
+        yield Label("Memory: [dim]1.2 GB / 64 GB[/dim]")
 
 class TimelinePane(Static):
-    """Chronologie sans émojis."""
+    """Chronologie épurée."""
     def compose(self) -> ComposeResult:
         yield Label("❯ TIMELINE", classes="pane-title")
         yield Label("[dim]23:15[/dim] Session initialized")
         yield Label("[dim]23:20[/dim] Commit 'Add L4 tree'")
+        yield Label("[dim]23:28[/dim] Sub-agent agy started")
         yield Label("[dim]23:35[/dim] Performance alert resolved")
 
 class AgentPromptBar(Horizontal):
-    """Barre d'invite de commande sans émojis."""
+    """Barre d'invite de commande type Claude Code / AGY sans encadrés."""
     def compose(self) -> ComposeResult:
         yield Label("❯ ", id="prompt-symbol")
         yield Input(placeholder="Ask a question, run a command (/compact, /clear)...", id="chat-input")
 
 class SentinelApp(App):
-    """Application TUI 100% sans émojis (Pro & Geek)."""
+    """Application TUI Pro & Geek (Style Claude Code, Herdr & OpenCode)."""
 
     TITLE = "Sentinel CLI"
     SUB_TITLE = "Terminal AI Watchdog"
@@ -226,7 +225,7 @@ class SentinelApp(App):
     }
 
     ProgressBar {
-        margin-top: 1;
+        margin-top: 0;
         margin-bottom: 1;
         height: 1;
         border: none;
@@ -286,12 +285,7 @@ class SentinelApp(App):
         
         with VerticalScroll(id="grid-container"):
             with Grid(id="main-grid"):
-                with Vertical():
-                    yield Label("❯ ACTIVE AGENTS", classes="pane-title")
-                    yield AgentCard("Claude Code", "Root", "Refactoring board.py", "04m 12s", "running")
-                    yield AgentCard("agy", "Gemini 3.6", "Writing unit tests", "01m 45s", "running")
-                
-                yield TokenGauges()
+                yield RootAgentPane()
                 yield GitStatusPane()
                 yield SecurityAuditPane()
                 yield TestPerfPane()
