@@ -31,10 +31,13 @@ class TokenGauges(Static):
     def compose(self) -> ComposeResult:
         yield Label("💡 FENÊTRE DE CONTEXTE & TOKENS", classes="pane-title")
         yield Label("📊 Fenêtre de contexte: [bold cyan]68%[/bold cyan] (136k / 200k tokens)")
-        yield ProgressBar(total=100, completed=68, show_eta=False, id="context-bar")
+        pb = ProgressBar(total=100, show_eta=False, id="context-bar")
+        pb.progress = 68
+        yield pb
         yield Label("💰 Coût estimé session: [bold green]$0.42[/bold green] (~48k input, ~4k output)")
         yield Label("\n⚠️ [bold yellow]ALERTE CONTEXTE:[/bold yellow]\n   Exécuter [bold cyan]/compact[/bold cyan] dans l'agent principal sous peu.")
         yield Label("\n💡 [bold magenta]CONSEILS D'OPTIMISATION:[/bold magenta]\n   • Activer le skill [bold white]`local-file-picker`[/bold white] (-40% tokens)\n   • Activer RAG Local sur `x99` pour docs C++")
+
 
 class GitStatusPane(Static):
     """Pane affichant les statistiques Git en direct."""
