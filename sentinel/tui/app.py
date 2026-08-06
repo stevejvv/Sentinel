@@ -1,16 +1,31 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Label, ProgressBar, Input, TabbedContent, TabPane, Button
-from textual.containers import Container, Horizontal, Vertical, Grid, ScrollableContainer
-from rich.text import Text
-from rich.panel import Panel
+from textual.widgets import Header, Footer, Static, Label, ProgressBar, Input, Button
+from textual.containers import Vertical, Grid, Horizontal
+from textual.theme import Theme
+
+# Thème Herdr-Minimaliste sur mesure
+HERDR_MINIMAL_THEME = Theme(
+    name="herdr-minimal",
+    primary="#38BDF8",       # Cyan Minimal Air
+    secondary="#818CF8",     # Indigo Doux
+    warning="#FBBF24",       # Amber Pastel
+    error="#F87171",         # Coral Pastel
+    success="#34D399",       # Émeraude Doux
+    accent="#A78BFA",        # Lavande
+    foreground="#F8FAFC",    # Blanc Cassé
+    background="#0B0F17",    # Fond Ardoise Très Sombre & Épuré
+    surface="#151D2A",       # Surface Panneaux
+    panel="#1E293B",         # Bordures et éléments d'arrière-plan
+    dark=True,
+)
 
 class TopStatusBanner(Static):
-    """Bannière supérieure affichant l'en-tête du système, le projet et le modèle actif."""
+    """Bannière supérieure minimaliste type Herdr."""
     def compose(self) -> ComposeResult:
-        yield Label("🛡️  SENTINEL CLI v0.1.0  │  Projet: SENTINEL  │  Sentinelle: Local x99 (Qwen 32B)", id="banner-text")
+        yield Label("🛡️ SENTINEL  │  Projet: [bold]SENTINEL[/bold]  │  Sentinelle: [dim]Local x99 (Qwen 32B)[/dim]", id="banner-text")
 
 class AgentCard(Static):
-    """Carte individuelle d'agent actif."""
+    """Carte d'agent minimaliste et aérée."""
     def __init__(self, agent_name: str, role: str, action: str, elapsed: str, status: str = "running", **kwargs):
         super().__init__(**kwargs)
         self.agent_name = agent_name
@@ -21,113 +36,110 @@ class AgentCard(Static):
 
     def compose(self) -> ComposeResult:
         status_icon = "🟢" if self.status == "running" else "🟡"
-        yield Label(f"{status_icon} [bold cyan]{self.agent_name}[/bold cyan] [dim]({self.role})[/dim]")
-        yield Label(f"   └─ Action: [italic]{self.action}[/italic]")
-        yield Label(f"   └─ Temps écoulé: [green]{self.elapsed}[/green]  │  MCPs: [bold yellow][sqlite] [github][/bold yellow]")
-
+        yield Label(f"{status_icon} [bold cyan]{self.agent_name}[/bold cyan] [dim]• {self.role}[/dim]")
+        yield Label(f"   └─ [italic]{self.action}[/italic]")
+        yield Label(f"   └─ Temps: [dim]{self.elapsed}[/dim]  │  MCPs: [yellow]sqlite, github[/yellow]")
 
 class TokenGauges(Static):
-    """Barres de jauge de consommation de tokens et de coût."""
+    """Panneau de contexte et de consommation de tokens."""
     def compose(self) -> ComposeResult:
-        yield Label("💡 FENÊTRE DE CONTEXTE & TOKENS", classes="pane-title")
-        yield Label("📊 Fenêtre de contexte: [bold cyan]68%[/bold cyan] (136k / 200k tokens)")
+        yield Label("💡 CONTEXTE & TOKENS", classes="pane-title")
+        yield Label("📊 Fenêtre: [bold cyan]68%[/bold cyan] [dim](136k / 200k tokens)[/dim]")
         pb = ProgressBar(total=100, show_eta=False, id="context-bar")
         pb.progress = 68
         yield pb
-        yield Label("💰 Coût estimé session: [bold green]$0.42[/bold green] (~48k input, ~4k output)")
-        yield Label("\n⚠️ [bold yellow]ALERTE CONTEXTE:[/bold yellow]\n   Exécuter [bold cyan]/compact[/bold cyan] dans l'agent principal sous peu.")
-        yield Label("\n💡 [bold magenta]CONSEILS D'OPTIMISATION:[/bold magenta]\n   • Activer le skill [bold white]`local-file-picker`[/bold white] (-40% tokens)\n   • Activer RAG Local sur `x99` pour docs C++")
-
+        yield Label("💰 Session: [bold green]$0.42[/bold green] [dim](48k input, 4k output)[/dim]")
+        yield Label("\n⚠️ [yellow]Recommandation:[/yellow] Exécuter [cyan]/compact[/cyan] sous peu.")
+        yield Label("\n💡 [magenta]Optimisation:[/magenta] Skill [dim]local-file-picker[/dim] (-40% tokens)")
 
 class GitStatusPane(Static):
-    """Pane affichant les statistiques Git en direct."""
+    """Statut Git minimaliste."""
     def compose(self) -> ComposeResult:
-        yield Label("📝 CONTRÔLE DE VERSION (Git)", classes="pane-title")
-        yield Label("Branche: [bold cyan]main[/bold cyan]  │  Statut: [bold yellow]3 Fichiers modifiés[/bold yellow]")
-        yield Label("Diff: [bold green]+142 Lignes[/bold green]  │  [bold red]-38 Lignes[/bold red]\n")
-        yield Label("📄 [bold white]src/engine/board.py[/bold white]       [green]+98[/green], [red]-12[/red]  [Modifié]")
-        yield Label("📄 [bold white]tests/test_forcing.py[/bold white]     [green]+44[/green], [red]-26[/red]  [Nouveau]")
-        yield Label("📄 [bold white]include/bitboard.hpp[/bold white]       [dim]+0, -0   [Staged][/dim]")
+        yield Label("📝 VERSION CONTROL (Git)", classes="pane-title")
+        yield Label("Branche: [bold cyan]main[/bold cyan]  │  Statut: [yellow]3 Modifiés[/yellow]")
+        yield Label("Diff: [green]+142[/green] [red]-38[/red] lignes\n")
+        yield Label("📄 [white]src/engine/board.py[/white]      [green]+98[/green], [red]-12[/red]")
+        yield Label("📄 [white]tests/test_forcing.py[/white]    [green]+44[/green], [red]-26[/red]")
+        yield Label("📄 [white]include/bitboard.hpp[/white]      [dim]+0, -0[/dim]")
 
 class SecurityAuditPane(Static):
-    """Pane d'audit de sécurité et de qualité du code."""
+    """Audit de sécurité minimaliste."""
     def compose(self) -> ComposeResult:
-        yield Label("🛡️ AUDIT SÉCURITÉ & SENTINELLE IA", classes="pane-title")
-        yield Label("🟢 [bold white]src/engine/board.py[/bold white]\n   └─ [dim]Code propre, typage C++ respecté.[/dim]")
-        yield Label("\n⚠️ [bold yellow]src/engine/eval.py[/bold yellow] [dim](Ligne 112)[/dim]\n   └─ [yellow]Risque d'index hors-limite sur la boucle lookup.[/yellow]")
-        yield Label("\n🔒 [bold green]Scanner de Clés:[/bold green] Aucune clé API ni secret détecté dans le stage.")
+        yield Label("🛡️ SÉCURITÉ & QUALITÉ", classes="pane-title")
+        yield Label("🟢 [white]src/engine/board.py[/white] [dim]Code propre[/dim]")
+        yield Label("\n⚠️ [yellow]src/engine/eval.py[/yellow] [dim]L112: Risque d'index[/dim]")
+        yield Label("\n🔒 [green]Scanner Secrets:[/green] [dim]Aucune clé détectée[/dim]")
 
 class TestPerfPane(Static):
-    """Pane des résultats de tests et métriques de performance."""
+    """Métriques de tests et perf."""
     def compose(self) -> ComposeResult:
-        yield Label("🧪 TESTS & PERFORMANCES MOTEUR", classes="pane-title")
-        yield Label("🔨 Compilation: [bold green]✅ PASS (GCC 14 -O3 -flto, 0 warnings)[/bold green]")
-        yield Label("🧪 Tests Unitaires: [bold green]142/142 Passed (100%)[/bold green]\n")
-        yield Label("⚡ BENCHMARK MOTEUR (36 Cœurs x99):")
-        yield Label("   • Vitesse: [bold cyan]14.8M NPS[/bold cyan] [green](▲ +4.2% vs baseline)[/green]")
-        yield Label("   • Mémoire: [bold white]1.2 GB / 64 GB[/bold white]  │  Threads: [bold white]18[/bold white]")
+        yield Label("🧪 TESTS & PERFORMANCES", classes="pane-title")
+        yield Label("🔨 Compilation: [green]✅ PASS[/green]")
+        yield Label("🧪 Tests Unitaires: [green]142/142 Passed[/green]\n")
+        yield Label("⚡ Vitesse Moteur: [cyan]14.8M NPS[/cyan] [green](+4.2%)[/green]")
+        yield Label("   RAM: [dim]1.2 GB / 64 GB[/dim]")
 
 class TimelinePane(Static):
-    """Pane chronologique des événements de session."""
+    """Chronologie de session."""
     def compose(self) -> ComposeResult:
-        yield Label("📜 CHRONOLOGIE DE SESSION", classes="pane-title")
-        yield Label("🕒 [dim]23:15:02[/dim] — Session démarrée")
-        yield Label("🕒 [dim]23:20:18[/dim] — Commit: [italic]'Add L4 forcing tree base'[/italic]")
-        yield Label("🕒 [dim]23:28:44[/dim] — Agent AGY: Tests unitaires générés")
-        yield Label("🕒 [dim]23:35:10[/dim] — Sentinelle: Alerte perf résolue (+4%)")
-        yield Label("\n📝 [dim]Taper [bold white]sentinel summary[/bold white] pour exporter le log.[/dim]")
+        yield Label("📜 CHRONOLOGIE", classes="pane-title")
+        yield Label("🕒 [dim]23:15[/dim] Session démarrée")
+        yield Label("🕒 [dim]23:20[/dim] Commit: 'Add L4 forcing tree base'")
+        yield Label("🕒 [dim]23:28[/dim] AGY: Tests générés")
+        yield Label("🕒 [dim]23:35[/dim] Sentinelle: Alerte perf résolue")
 
 class InteractiveChatBar(Horizontal):
-    """Barre de chat et questions-réponses interactives."""
+    """Barre de chat minimaliste."""
     def compose(self) -> ComposeResult:
         yield Input(placeholder="💬 Posez une question au LLM ou tapez une commande (/compact, /clear)...", id="chat-input")
         yield Button("Envoyer", variant="primary", id="chat-send")
 
 class SentinelApp(App):
-    """Application TUI principale Sentinel réécrite sous Textual avec Design System avancé."""
+    """Application TUI Minimaliste Herdr-style avec Sélecteur de Thème dynamique."""
 
-    TITLE = "Sentinel CLI — AI Watchdog Dashboard"
-    SUB_TITLE = "Terminal Security Guard & Token Advisor"
+    TITLE = "Sentinel CLI"
+    SUB_TITLE = "AI Watchdog & Minimalist Dashboard"
+
+    # Liste des thèmes cyclables
+    THEMES_CYCLE = ["herdr-minimal", "tokyo-night", "nord", "catppuccin-latte", "dracula", "rose-pine"]
 
     CSS = """
     Screen {
-        background: #0B0F19;
-        color: #F1F5F9;
         layout: vertical;
+        padding: 0;
     }
 
     TopStatusBanner {
-        background: #0F172A;
-        color: #38BDF8;
-        border-bottom: heavy #38BDF8;
+        background: $surface;
+        color: $primary;
+        border-bottom: solid $panel;
         height: 3;
         content-align: center middle;
-        text-style: bold;
+        padding: 0 2;
     }
 
     #main-grid {
         layout: grid;
         grid-size: 2 3;
         grid-gutter: 1;
-        padding: 1;
+        padding: 1 2;
         height: 1fr;
     }
 
     Static {
-        background: #1E293B;
-        border: round #334155;
-        padding: 1;
+        background: $surface;
+        border: round $panel;
+        padding: 1 2;
     }
 
     Static:focus {
-        border: round #38BDF8;
-        background: #0F172A;
+        border: round $primary;
     }
 
     .pane-title {
-        color: #38BDF8;
+        color: $primary;
         text-style: bold;
-        border-bottom: solid #334155;
+        border-bottom: solid $panel;
         margin-bottom: 1;
         padding-bottom: 0;
     }
@@ -138,67 +150,54 @@ class SentinelApp(App):
     }
 
     ProgressBar > .bar--bar {
-        color: #00F0FF;
-        background: #334155;
+        color: $primary;
+        background: $panel;
     }
 
     ProgressBar > .bar--complete {
-        color: #38BDF8;
+        color: $accent;
     }
 
     InteractiveChatBar {
         height: 3;
-        padding: 0 1;
-        background: #0F172A;
-        border-top: solid #334155;
+        padding: 0 2;
+        background: $surface;
+        border-top: solid $panel;
     }
 
     #chat-input {
         width: 1fr;
-        border: round #38BDF8;
-        background: #1E293B;
-        color: #F8FAFC;
+        border: round $panel;
+        background: $background;
+        color: $foreground;
     }
 
     #chat-send {
         width: 12;
         margin-left: 1;
-        background: #0284C7;
-        color: #FFFFFF;
-        border: none;
-    }
-
-    #chat-send:hover {
-        background: #0369A1;
     }
     """
 
     BINDINGS = [
         ("q", "quit", "Quitter"),
+        ("t", "cycle_theme", "Changer Thème"),
         ("r", "refresh", "Rafraîchir"),
         ("s", "summary", "Export Summary"),
         ("c", "focus_chat", "Chat Projet"),
-        ("t", "run_tests", "Lancer Tests"),
     ]
 
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
-        yield TopStatusBanner()
-        
-        with Grid(id="main-grid"):
-            with Vertical():
-                yield Label("🤖 AGENTS & SUB-AGENTS ACTIFS", classes="pane-title")
-                yield AgentCard("Claude Code (Root)", "Root Agent", "Refactoring src/engine/board.py", "04m 12s", "running")
-                yield AgentCard("agy", "Sub-agent Gemini 3.6", "Writing unit tests for movegen.py", "01m 45s", "running")
-            
-            yield TokenGauges()
-            yield GitStatusPane()
-            yield SecurityAuditPane()
-            yield TestPerfPane()
-            yield TimelinePane()
+    def on_mount(self) -> None:
+        """Enregistre et applique le thème Herdr-minimal par défaut à l'ouverture."""
+        self.register_theme(HERDR_MINIMAL_THEME)
+        self.theme = "herdr-minimal"
+        self.current_theme_index = 0
 
-        yield InteractiveChatBar()
-        yield Footer()
+    def action_cycle_theme(self) -> None:
+        """Cycle dynamiquement entre les thèmes disponibles."""
+        self.current_theme_index = (self.current_theme_index + 1) % len(self.THEMES_CYCLE)
+        new_theme = self.THEMES_CYCLE[self.current_theme_index]
+        self.theme = new_theme
+        self.notify(f"🎨 Thème actif : [bold cyan]{new_theme}[/bold cyan]", title="Sélecteur de Thème")
 
     def action_focus_chat(self) -> None:
         """Focus sur le champ de saisie du chat interactif."""
