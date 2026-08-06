@@ -11,9 +11,9 @@ class TopStatusBanner(Static):
 
 class AgentCard(Static):
     """Carte individuelle d'agent actif."""
-    def __init__(self, name: str, role: str, action: str, elapsed: str, status: str = "running", **kwargs):
+    def __init__(self, agent_name: str, role: str, action: str, elapsed: str, status: str = "running", **kwargs):
         super().__init__(**kwargs)
-        self.name = name
+        self.agent_name = agent_name
         self.role = role
         self.action = action
         self.elapsed = elapsed
@@ -21,9 +21,10 @@ class AgentCard(Static):
 
     def compose(self) -> ComposeResult:
         status_icon = "🟢" if self.status == "running" else "🟡"
-        yield Label(f"{status_icon} [bold cyan]{self.name}[/bold cyan] [dim]({self.role})[/dim]")
+        yield Label(f"{status_icon} [bold cyan]{self.agent_name}[/bold cyan] [dim]({self.role})[/dim]")
         yield Label(f"   └─ Action: [italic]{self.action}[/italic]")
         yield Label(f"   └─ Temps écoulé: [green]{self.elapsed}[/green]  │  MCPs: [bold yellow][sqlite] [github][/bold yellow]")
+
 
 class TokenGauges(Static):
     """Barres de jauge de consommation de tokens et de coût."""
