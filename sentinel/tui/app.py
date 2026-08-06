@@ -219,9 +219,17 @@ class SentinelApp(App):
 
     #main-grid {
         layout: grid;
-        grid-size: 2 3;
+        grid-size: 2 2;
         grid-gutter: 1 2;
         padding: 1 2;
+    }
+
+    RootAgentPane {
+        height: auto;
+        max-height: 50%;
+        padding: 0 2;
+        border-left: solid $panel;
+        margin: 1 2 0 2;
     }
 
     Static {
@@ -288,8 +296,8 @@ class SentinelApp(App):
         yield TopStatusBanner()
         
         with VerticalScroll(id="grid-container"):
+            yield RootAgentPane()
             with Grid(id="main-grid"):
-                yield RootAgentPane()
                 yield GitStatusPane()
                 yield SecurityAuditPane()
                 yield TestPerfPane()
