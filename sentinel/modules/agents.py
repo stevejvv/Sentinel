@@ -55,15 +55,19 @@ class AgentInspector:
     """Inspecteur dynamique des processus, transcripts, skills et MCPs d'agents IA (AGY, Claude, OpenCode)."""
 
     def _get_latest_agy_transcript(self) -> Optional[Path]:
-        """Trouve le fichier transcript.jsonl le plus récent dans le dossier brain d'AGY."""
+        """Trouve le fichier transcript.jsonl le plus récent parmi les sessions actives d'AGY."""
         try:
             presence_locks = list((AGY_CLI_DIR / "presence").glob("*.lock"))
             if presence_locks:
-                latest_lock = max(presence_locks, key=lambda p: p.stat().st_mtime)
-                conv_id = latest_lock.stem
-                transcript_path = AGY_CLI_DIR / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
-                if transcript_path.exists():
-                    return transcript_path
+                active_transcripts = []
+                for lock in presence_locks:
+                    conv_id = lock.stem
+                    t_path = AGY_CLI_DIR / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
+                    if t_path.exists():
+                        active_transcripts.append(t_path)
+                
+                if active_transcripts:
+                    return max(active_transcripts, key=lambda p: p.stat().st_mtime)
 
             transcripts = list((AGY_CLI_DIR / "brain").glob("*/.system_generated/logs/transcript.jsonl"))
             if transcripts:
