@@ -13,14 +13,13 @@ console = Console()
 @app.command()
 def run():
     """Lanche le Dashboard TUI Sentinel en temps réel."""
-    console.print(Panel.fit("[bold cyan]🛡️ Lancement de Sentinel Dashboard TUI...[/bold cyan]\n[dim]Pression sur [Ctrl+C] ou [Q] pour quitter[/dim]", border_style="cyan"))
-    # Import tardif pour de meilleures performances CLI
     try:
         from sentinel.tui.app import SentinelApp
         app_tui = SentinelApp()
         app_tui.run()
     except Exception as e:
         console.print(f"[bold red]Erreur au lancement du Dashboard TUI :[/bold red] {e}")
+
 
 @app.command()
 def init():

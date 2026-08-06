@@ -103,6 +103,12 @@ class SentinelApp(App):
     # Liste des thèmes cyclables
     THEMES_CYCLE = ["herdr-minimal", "tokyo-night", "nord", "catppuccin-latte", "dracula", "rose-pine"]
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.register_theme(HERDR_MINIMAL_THEME)
+        self.theme = "herdr-minimal"
+        self.current_theme_index = 0
+
     CSS = """
     Screen {
         layout: vertical;
@@ -118,12 +124,16 @@ class SentinelApp(App):
         padding: 0 2;
     }
 
+    #grid-container {
+        height: 1fr;
+        overflow-y: auto;
+    }
+
     #main-grid {
         layout: grid;
         grid-size: 2 3;
         grid-gutter: 1;
         padding: 1 2;
-        height: 1fr;
     }
 
     Static {
@@ -180,17 +190,32 @@ class SentinelApp(App):
 
     BINDINGS = [
         ("q", "quit", "Quitter"),
+        ("ctrl+c", "quit", "Quitter"),
         ("t", "cycle_theme", "Changer Thème"),
         ("r", "refresh", "Rafraîchir"),
         ("s", "summary", "Export Summary"),
         ("c", "focus_chat", "Chat Projet"),
     ]
 
-    def on_mount(self) -> None:
-        """Enregistre et applique le thème Herdr-minimal par défaut à l'ouverture."""
-        self.register_theme(HERDR_MINIMAL_THEME)
-        self.theme = "herdr-minimal"
-        self.current_theme_index = 0
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield TopStatusBanner()
+        
+        with ScrollableContainer(id="grid-container"):
+            with Grid(id="main-grid"):
+                with Vertical():
+                    yield Label("🤖 AGENTS & SUB-AGENTS ACTIFS", classes="pane-title")
+                    yield AgentCard("Claude Code (Root)", "Root Agent", "Refactoring src/engine/board.py", "04m 12s", "running")
+                    yield AgentCard("agy", "Sub-agent Gemini 3.6", "Writing unit tests for movegen.py", "01m 45s", "running")
+                
+                yield TokenGauges()
+                yield GitStatusPane()
+                yield SecurityAuditPane()
+                yield TestPerfPane()
+                yield TimelinePane()
+
+        yield InteractiveChatBar()
+        yield Footer()
 
     def action_cycle_theme(self) -> None:
         """Cycle dynamiquement entre les thèmes disponibles."""
@@ -207,3 +232,4 @@ class SentinelApp(App):
 if __name__ == "__main__":
     app = SentinelApp()
     app.run()
+
