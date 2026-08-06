@@ -1,6 +1,7 @@
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Label, ProgressBar, Input, Button
-from textual.containers import Vertical, Grid, Horizontal
+from textual.containers import Vertical, Grid, Horizontal, VerticalScroll
+
 from textual.theme import Theme
 
 # Thème Herdr-Minimaliste sur mesure
@@ -201,7 +202,7 @@ class SentinelApp(App):
         yield Header(show_clock=True)
         yield TopStatusBanner()
         
-        with ScrollableContainer(id="grid-container"):
+        with VerticalScroll(id="grid-container"):
             with Grid(id="main-grid"):
                 with Vertical():
                     yield Label("🤖 AGENTS & SUB-AGENTS ACTIFS", classes="pane-title")
