@@ -137,12 +137,7 @@ class SentinelApp(App):
         padding: 1 2;
     }
 
-    /* Media query réactive pour terminaux étroits (< 100 colonnes) */
-    @media (max-width: 100) {
-        #main-grid {
-            grid-size: 1;
-        }
-    }
+
 
 
     Static {
@@ -226,6 +221,17 @@ class SentinelApp(App):
         yield InteractiveChatBar()
         yield Footer()
 
+    def on_resize(self, event) -> None:
+        """Ajuste dynamiquement la grille en 1 ou 2 colonnes selon la largeur du terminal."""
+        try:
+            grid = self.query_one("#main-grid", Grid)
+            if event.size.width < 100:
+                grid.styles.grid_size_columns = 1
+            else:
+                grid.styles.grid_size_columns = 2
+        except Exception:
+            pass
+
     def action_cycle_theme(self) -> None:
         """Cycle dynamiquement entre les thèmes disponibles."""
         self.current_theme_index = (self.current_theme_index + 1) % len(self.THEMES_CYCLE)
@@ -241,4 +247,5 @@ class SentinelApp(App):
 if __name__ == "__main__":
     app = SentinelApp()
     app.run()
+
 
