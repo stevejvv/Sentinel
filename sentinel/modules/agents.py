@@ -1,6 +1,5 @@
 import os
 import json
-import glob
 import time
 import psutil
 from pathlib import Path
@@ -23,7 +22,8 @@ class AgentInfo:
         context_max: int,
         skills: List[str],
         mcps: List[str],
-        is_subagent: bool = False
+        is_subagent: bool = False,
+        cwd: str = ""
     ):
         self.pid = pid
         self.name = name
@@ -37,6 +37,7 @@ class AgentInfo:
         self.skills = skills
         self.mcps = mcps
         self.is_subagent = is_subagent
+        self.cwd = cwd
 
     @property
     def context_percent(self) -> int:
@@ -50,7 +51,7 @@ class AgentInfo:
         return f"{mins:02d}m {secs:02d}s"
 
 class AgentInspector:
-    """Inspecteur de processus et de logs système multi-agents (AGY, Claude Code, OpenCode)."""
+    """Inspecteur de processus et de logs système filtré par dossier de projet."""
 
     def _get_latest_agy_transcript(self) -> Optional[Path]:
         """Trouve le fichier transcript.jsonl le plus récent dans le dossier brain d'AGY."""
@@ -70,32 +71,28 @@ class AgentInspector:
             pass
         return None
 
-    def _parse_agy_session(self, pid: int, elapsed_seconds: float) -> List[AgentInfo]:
+    def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
         """Extrait les vraies données de la session AGY en lisant les transcripts et logs."""
         agents: List[AgentInfo] = []
         transcript_path = self._get_latest_agy_transcript()
 
         last_user_request = "Session active"
-        estimated_tokens = 45000
+        estimated_tokens = 20000
         active_subagents: List[AgentInfo] = []
         model_name = "Gemini 3.6 Flash (High)"
 
-        # 1. Scanner les skills installés
+        # Skills installés
         skills: List[str] = []
         skills_dir = AGY_CLI_DIR / "skills"
         if skills_dir.exists():
             skills = [s.name for s in skills_dir.iterdir() if s.is_dir() and not s.name.startswith(".")]
-        if not skills:
-            skills = ["antigravity-guide"]
 
-        # 2. Scanner les MCPs/Outils engagés
         mcps = ["list_dir", "view_file", "replace_file_content", "run_command"]
 
-        # 3. Parser le transcript.jsonl
         if transcript_path and transcript_path.exists():
             try:
                 file_size = transcript_path.stat().st_size
-                estimated_tokens = max(5000, file_size // 4)
+                estimated_tokens = max(2000, file_size // 4)
 
                 with open(transcript_path, "r", encoding="utf-8") as f:
                     for line in f:
@@ -135,7 +132,8 @@ class AgentInspector:
                                                     context_max=200000,
                                                     skills=[],
                                                     mcps=["view_file"],
-                                                    is_subagent=True
+                                                    is_subagent=True,
+                                                    cwd=cwd
                                                 )
                                             )
                         except Exception:
@@ -158,32 +156,52 @@ class AgentInspector:
             context_max=200000,
             skills=skills,
             mcps=mcps,
-            is_subagent=False
+            is_subagent=False,
+            cwd=cwd
         )
         agents.append(root_agent)
         agents.extend(active_subagents)
         return agents
 
-    def _parse_claude_session(self, pid: int, elapsed_seconds: float) -> List[AgentInfo]:
-        """Extrait les vraies données d'une session Claude Code."""
+    def _parse_claude_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
+        """Extrait les vraies données d'une session Claude Code pour un répertoire spécifique."""
         agents: List[AgentInfo] = []
         last_user_request = "Active CLI Session"
+        estimated_tokens = 15000
+
+        encoded_cwd = cwd.replace("/", "-")
+        claude_proj_dir = CLAUDE_CLI_DIR / "projects" / encoded_cwd
+
         skills = ["file-search", "git", "bash"]
         mcps = ["context-mode"]
 
-        # Lire history.jsonl si disponible
-        history_file = CLAUDE_CLI_DIR / "history.jsonl"
-        if history_file.exists():
-            try:
-                with open(history_file, "r", encoding="utf-8") as f:
-                    lines = [l for l in f if l.strip()]
-                    if lines:
-                        last_item = json.loads(lines[-1])
-                        display = last_item.get("display") or last_item.get("text") or ""
-                        if display:
-                            last_user_request = display.strip().split("\n")[0]
-            except Exception:
-                pass
+        if claude_proj_dir.exists():
+            jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
+            if jsonl_files:
+                latest_jsonl = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+                estimated_tokens = max(3000, latest_jsonl.stat().st_size // 4)
+                try:
+                    with open(latest_jsonl, "r", encoding="utf-8") as f:
+                        lines = [l for l in f if l.strip()]
+                        for l in reversed(lines):
+                            try:
+                                data = json.loads(l)
+                                if data.get("type") == "user" and "message" in data:
+                                    content = data["message"].get("content", "")
+                                    if isinstance(content, str) and content.strip():
+                                        last_user_request = content.strip().split("\n")[0]
+                                        break
+                                    elif isinstance(content, list) and content:
+                                        for item in content:
+                                            if isinstance(item, dict) and item.get("type") == "text":
+                                                last_user_request = item.get("text", "").strip().split("\n")[0]
+                                                break
+                                        if last_user_request != "Active CLI Session":
+                                            break
+                            except Exception:
+                                continue
+                except Exception:
+                    pass
 
         if len(last_user_request) > 60:
             last_user_request = last_user_request[:57] + "..."
@@ -196,19 +214,24 @@ class AgentInspector:
             action=last_user_request,
             elapsed_seconds=elapsed_seconds,
             remaining_time="~02m 00s",
-            context_used=52000,
+            context_used=estimated_tokens,
             context_max=200000,
             skills=skills,
             mcps=mcps,
-            is_subagent=False
+            is_subagent=False,
+            cwd=cwd
         )
         agents.append(claude_root)
         return agents
 
-    def scan_active_agents(self) -> List[AgentInfo]:
-        """Scanne le système et renvoie TOUS les agents et sub-agents actifs en parallèle."""
+    def scan_active_agents(self, target_dir: Optional[Path] = None) -> List[AgentInfo]:
+        """Scanne les processus système et renvoie UNIQUEMENT les agents actifs dans target_dir (par défaut Path.cwd())."""
+        if target_dir is None:
+            target_dir = Path.cwd().resolve()
+        else:
+            target_dir = Path(target_dir).resolve()
+
         active_agents: List[AgentInfo] = []
-        scanned_categories = set()
 
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
@@ -217,31 +240,29 @@ class AgentInspector:
                     cmd_str = " ".join(cmdline).lower()
                     pname = (proc.info['name'] or "").lower()
 
-                    # 1. Détection AGY
-                    if ("antigravity" in cmd_str or "agy" in cmd_str) and "agy" not in scanned_categories:
-                        elapsed = time.time() - proc.info['create_time']
-                        parsed = self._parse_agy_session(proc.info['pid'], elapsed)
-                        if parsed:
-                            active_agents.extend(parsed)
-                            scanned_categories.add("agy")
+                    # Vérifier le répertoire de travail du processus
+                    proc_cwd_str = proc.cwd()
+                    proc_cwd = Path(proc_cwd_str).resolve()
 
-                    # 2. Détection Claude Code
-                    elif ("claude" in cmd_str or "claude" in pname) and "claude" not in scanned_categories:
-                        elapsed = time.time() - proc.info['create_time']
-                        parsed = self._parse_claude_session(proc.info['pid'], elapsed)
+                    # Ne conserver que les processus dont le CWD correspond au projet actuel
+                    if proc_cwd != target_dir and target_dir not in proc_cwd.parents:
+                        continue
+
+                    elapsed = time.time() - proc.info['create_time']
+
+                    if "antigravity" in cmd_str or "agy" in cmd_str:
+                        parsed = self._parse_agy_session(proc.info['pid'], elapsed, str(proc_cwd))
                         if parsed:
                             active_agents.extend(parsed)
-                            scanned_categories.add("claude")
+
+                    elif "claude" in cmd_str or "claude" in pname:
+                        parsed = self._parse_claude_session(proc.info['pid'], elapsed, str(proc_cwd))
+                        if parsed:
+                            active_agents.extend(parsed)
 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
         except Exception:
             pass
-
-        # Fallback de détection sur disque si les processus psutil n'ont pas matché
-        if "agy" not in scanned_categories:
-            transcript = self._get_latest_agy_transcript()
-            if transcript:
-                active_agents.extend(self._parse_agy_session(os.getpid(), 120.0))
 
         return active_agents

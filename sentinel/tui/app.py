@@ -1,4 +1,5 @@
 from typing import List
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Label, Input
 from textual.containers import Vertical, Grid, Horizontal, VerticalScroll
@@ -88,10 +89,11 @@ MONOKAI_PRO_THEME = Theme(
 class TopStatusBanner(Static):
     """Bannière minimale sans bordures ni émojis."""
     def compose(self) -> ComposeResult:
-        yield Label("[bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
+        proj_name = Path.cwd().name
+        yield Label(f"[bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]{proj_name}[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
 
 class RootAgentPane(Static):
-    """Orchestration directe et minimale des agents & sub-agents en temps réel."""
+    """Orchestration directe et minimale des agents & sub-agents filtrée par projet."""
     def compose(self) -> ComposeResult:
         yield Label("❯ AGENT ORCHESTRATION", classes="pane-title")
         yield Vertical(id="agent-tree-content")
@@ -101,6 +103,11 @@ class RootAgentPane(Static):
         container = self.query_one("#agent-tree-content", Vertical)
         container.remove_children()
 
+        if not agents:
+            curr_dir = Path.cwd().name
+            container.mount(Label(f"[dim][OFFLINE] Aucune session d'agent IA active dans ce projet ({curr_dir})[/dim]"))
+            return
+
         root_agents = [a for a in agents if not a.is_subagent]
         sub_agents = [a for a in agents if a.is_subagent]
 
@@ -109,8 +116,10 @@ class RootAgentPane(Static):
             container.mount(Label(f"[bold success][RUNNING][/bold success] [bold white]{root.name}[/bold white] [dim]({root.role})[/dim]"))
             container.mount(Label(f" ├─ Action: [bold primary]{root.action}[/bold primary]"))
             container.mount(Label(f" ├─ Context: [bold primary]{root.context_percent}%[/bold primary] [dim]({root.context_used // 1000}k / {root.context_max // 1000}k)[/dim]  {warn}"))
-            container.mount(Label(f" ├─ Active Skills: [dim]{', '.join(root.skills)}[/dim]"))
-            container.mount(Label(f" └─ Active MCPs: [dim]{', '.join(root.mcps)}[/dim]\n"))
+            skills_str = ", ".join(root.skills) if root.skills else "aucun"
+            mcps_str = ", ".join(root.mcps) if root.mcps else "aucun"
+            container.mount(Label(f" ├─ Active Skills: [dim]{skills_str}[/dim]"))
+            container.mount(Label(f" └─ Active MCPs: [dim]{mcps_str}[/dim]\n"))
 
         if sub_agents:
             container.mount(Label(" └─ ❯ SUB-AGENTS"))
@@ -164,7 +173,7 @@ class AgentPromptBar(Horizontal):
         yield Input(placeholder="Ask a question, run a command (/compact, /clear)...", id="chat-input")
 
 class SentinelApp(App):
-    """Application TUI Minimaliste & Directe (Sans barres de progression ni fioritures)."""
+    """Application TUI Minimaliste & Directe (Filtrage de projet strict)."""
 
     TITLE = "Sentinel CLI"
     SUB_TITLE = "Terminal AI Watchdog"
@@ -290,12 +299,12 @@ class SentinelApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Initialise la détection en direct des agents et configure le rafraîchissement périodique."""
+        """Initialise la détection en direct des agents du projet courant."""
         self.refresh_agents()
         self.set_interval(2.0, self.refresh_agents)
 
     def refresh_agents(self) -> None:
-        """Met à jour les données réelles des agents scannés."""
+        """Met à jour les données réelles des agents scannés dans le répertoire courant."""
         try:
             agents = self.inspector.scan_active_agents()
             root_pane = self.query_one(RootAgentPane)
