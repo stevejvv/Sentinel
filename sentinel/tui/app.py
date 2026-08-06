@@ -137,6 +137,14 @@ class SentinelApp(App):
         padding: 1 2;
     }
 
+    /* Media query réactive pour terminaux étroits (< 100 colonnes) */
+    @media (max-width: 100) {
+        #main-grid {
+            grid-size: 1;
+        }
+    }
+
+
     Static {
         background: $surface;
         border: round $panel;
