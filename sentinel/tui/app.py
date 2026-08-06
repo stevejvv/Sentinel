@@ -3,26 +3,90 @@ from textual.widgets import Header, Footer, Static, Label, ProgressBar, Input
 from textual.containers import Vertical, Grid, Horizontal, VerticalScroll
 from textual.theme import Theme
 
-# Thème Geek Hi-Tech Épuré (Sans encadrés, style Claude Code / AGY / OpenCode)
-HI_TECH_GEEK_THEME = Theme(
-    name="hi-tech-geek",
-    primary="#00F0FF",       # Cyan Néon Électrique
-    secondary="#7000FF",     # Violet Synthwave
-    warning="#FFB000",       # Amber Lumineux
-    error="#FF453A",         # Rouge néon
-    success="#00FF66",       # Vert Émeraude Matrix
+# 1. Thème Claude Code Dark (Amber Chaud & Anthracite Pro)
+CLAUDE_DARK_THEME = Theme(
+    name="claude-dark",
+    primary="#D97706",       # Amber Chaud Anthropic
+    secondary="#38BDF8",     # Cyan Doux
+    warning="#F59E0B",
+    error="#EF4444",
+    success="#10B981",
+    accent="#F97316",        # Orange
+    foreground="#ECECF1",    # Blanc Cassé Pro
+    background="#171717",    # Anthracite Sombre
+    surface="#262626",       # Surface Sombre
+    panel="#404040",         # Séparateurs
+    dark=True,
+)
+
+# 2. Thème Herdr Dark (Cyan Électrique & Ardoise Midnight)
+HERDR_DARK_THEME = Theme(
+    name="herdr-dark",
+    primary="#00F0FF",       # Cyan Électrique Herdr
+    secondary="#818CF8",     # Indigo
+    warning="#FBBF24",
+    error="#F87171",
+    success="#34D399",
     accent="#00F0FF",
-    foreground="#E6EDF3",    # Texte très net (GitHub Dark style)
-    background="#0D1117",    # Fond ultra-sombre geek
-    surface="#161B22",       # Surface minimale
-    panel="#21262D",         # Séparateurs subtils
+    foreground="#F8FAFC",    # Blanc Cassé Slate
+    background="#0B0F17",    # Midnight Slate
+    surface="#151D2A",       # Surface Slate
+    panel="#1E293B",
+    dark=True,
+)
+
+# 3. Thème OpenCode / VS Code Dark Plus
+OPENCODE_DARK_THEME = Theme(
+    name="opencode-dark",
+    primary="#61AFEF",       # OpenCode / VS Code Blue
+    secondary="#C678DD",     # Violet Muted
+    warning="#E5C07B",
+    error="#E06C75",
+    success="#98C379",
+    accent="#56B6C2",
+    foreground="#ABB2BF",    # Code Gray
+    background="#1E1E1E",    # VS Code Dark background
+    surface="#252526",       # Side Bar Gray
+    panel="#333333",
+    dark=True,
+)
+
+# 4. Thème Matrix Terminal (Vert Émeraude Monochrome Geek)
+MATRIX_GEEK_THEME = Theme(
+    name="matrix-geek",
+    primary="#00FF66",       # Vert Matrix Émeraude
+    secondary="#00DD55",
+    warning="#FFB000",
+    error="#FF453A",
+    success="#00FF66",
+    accent="#00FF66",
+    foreground="#E0F8E0",    # Blanc Teinté Vert
+    background="#080C08",    # Terminal Noir Épuré
+    surface="#101810",
+    panel="#1B281B",
+    dark=True,
+)
+
+# 5. Thème Monokai Pro (Charcoal & Pastels Pro)
+MONOKAI_PRO_THEME = Theme(
+    name="monokai-pro",
+    primary="#FFD866",       # Monokai Gold
+    secondary="#78DCE8",     # Cyan
+    warning="#FC9867",       # Orange
+    error="#FF6188",         # Red
+    success="#A9DC76",       # Green
+    accent="#AB9DF2",        # Purple
+    foreground="#FCFCFA",    # Off-White
+    background="#2D2A2E",    # Monokai Charcoal
+    surface="#3A383C",
+    panel="#4A474D",
     dark=True,
 )
 
 class TopStatusBanner(Static):
     """Bannière minimale sans bordures type CLI agent."""
     def compose(self) -> ComposeResult:
-        yield Label("🛡️ [bold cyan]SENTINEL[/bold cyan] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold green]Local x99 (Qwen 32B)[/bold green]", id="banner-text")
+        yield Label("🛡️ [bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
 
 class AgentCard(Static):
     """Ligne d'agent minimaliste sans encadré."""
@@ -37,28 +101,28 @@ class AgentCard(Static):
     def compose(self) -> ComposeResult:
         status_icon = "🟢" if self.status == "running" else "🟡"
         yield Label(f"{status_icon} [bold white]{self.agent_name}[/bold white] [dim]({self.role})[/dim]")
-        yield Label(f"   [dim]└─[/dim] Action: [cyan]{self.action}[/cyan]")
-        yield Label(f"   [dim]└─ Elapsed:[/dim] [green]{self.elapsed}[/green]  │  [dim]MCPs:[/dim] [yellow]sqlite, github[/yellow]")
+        yield Label(f"   [dim]└─[/dim] Action: [bold primary]{self.action}[/bold primary]")
+        yield Label(f"   [dim]└─ Elapsed:[/dim] [bold success]{self.elapsed}[/bold success]  │  [dim]MCPs:[/dim] [yellow]sqlite, github[/yellow]")
 
 class TokenGauges(Static):
     """Panneau de contexte minimaliste sans encadré."""
     def compose(self) -> ComposeResult:
         yield Label("❯ FENÊTRE DE CONTEXTE & TOKENS", classes="pane-title")
-        yield Label("📊 Contexte: [bold cyan]68%[/bold cyan] [dim](136k / 200k tokens)[/dim]")
+        yield Label("📊 Contexte: [bold primary]68%[/bold primary] [dim](136k / 200k tokens)[/dim]")
         pb = ProgressBar(total=100, show_eta=False, id="context-bar")
         pb.progress = 68
         yield pb
-        yield Label("💰 Session: [bold green]$0.42[/bold green] [dim](48k in, 4k out)[/dim]")
-        yield Label("⚠️ [yellow]Rec:[/yellow] Exécuter [cyan]/compact[/cyan]")
+        yield Label("💰 Session: [bold success]$0.42[/bold success] [dim](48k in, 4k out)[/dim]")
+        yield Label("⚠️ [yellow]Rec:[/yellow] Exécuter [bold primary]/compact[/bold primary]")
 
 class GitStatusPane(Static):
     """Statut Git épuré."""
     def compose(self) -> ComposeResult:
         yield Label("❯ VERSION CONTROL (Git)", classes="pane-title")
-        yield Label("Branch: [bold cyan]main[/bold cyan]  │  [yellow]3 Modified[/yellow]")
-        yield Label("Diff: [bold green]+142[/bold green] [bold red]-38[/bold red] lines")
-        yield Label("📄 [white]src/engine/board.py[/white]      [green]+98[/green] [red]-12[/red]")
-        yield Label("📄 [white]tests/test_forcing.py[/white]    [green]+44[/green] [red]-26[/red]")
+        yield Label("Branch: [bold primary]main[/bold primary]  │  [yellow]3 Modified[/yellow]")
+        yield Label("Diff: [bold success]+142[/bold success] [bold error]-38[/bold error] lines")
+        yield Label("📄 [white]src/engine/board.py[/white]      [success]+98[/success] [error]-12[/error]")
+        yield Label("📄 [white]tests/test_forcing.py[/white]    [success]+44[/success] [error]-26[/error]")
 
 class SecurityAuditPane(Static):
     """Audit de sécurité épuré."""
@@ -66,15 +130,15 @@ class SecurityAuditPane(Static):
         yield Label("❯ SÉCURITÉ & SENTINELLE", classes="pane-title")
         yield Label("🟢 [white]src/engine/board.py[/white] [dim]Clean[/dim]")
         yield Label("⚠️ [yellow]src/engine/eval.py[/yellow] [dim]L112: Index check[/dim]")
-        yield Label("🔒 [green]Secrets:[/green] [dim]No API keys leaked[/dim]")
+        yield Label("🔒 [success]Secrets:[/success] [dim]No API keys leaked[/dim]")
 
 class TestPerfPane(Static):
     """Métriques de tests et perf épurées."""
     def compose(self) -> ComposeResult:
         yield Label("❯ TESTS & PERFORMANCES", classes="pane-title")
-        yield Label("🔨 Build: [bold green]PASS (GCC 14 -O3)[/bold green]")
-        yield Label("🧪 Tests: [bold green]142/142 Passed[/bold green]")
-        yield Label("⚡ Speed: [bold cyan]14.8M NPS[/bold cyan] [green](+4.2%)[/green]")
+        yield Label("🔨 Build: [bold success]PASS (GCC 14 -O3)[/bold success]")
+        yield Label("🧪 Tests: [bold success]142/142 Passed[/bold success]")
+        yield Label("⚡ Speed: [bold primary]14.8M NPS[/bold primary] [success](+4.2%)[/success]")
 
 class TimelinePane(Static):
     """Chronologie épurée."""
@@ -91,31 +155,41 @@ class AgentPromptBar(Horizontal):
         yield Input(placeholder="Ask a question, run a command (/compact, /clear)...", id="chat-input")
 
 class SentinelApp(App):
-    """Application TUI Geek & Hi-Tech sans encadrés, style Claude Code / AGY."""
+    """Application TUI Pro & Geek (Style Claude Code, Herdr & OpenCode)."""
 
     TITLE = "Sentinel CLI"
     SUB_TITLE = "Terminal AI Watchdog"
 
-    THEMES_CYCLE = ["hi-tech-geek", "tokyo-night", "nord", "catppuccin-latte", "dracula", "rose-pine"]
+    # 5 Thèmes Pro & Geek inspirés des agents et éditeurs de code
+    THEMES_MAP = {
+        "claude-dark": CLAUDE_DARK_THEME,
+        "herdr-dark": HERDR_DARK_THEME,
+        "opencode-dark": OPENCODE_DARK_THEME,
+        "matrix-geek": MATRIX_GEEK_THEME,
+        "monokai-pro": MONOKAI_PRO_THEME,
+    }
+    THEMES_CYCLE = list(THEMES_MAP.keys())
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.register_theme(HI_TECH_GEEK_THEME)
-        self.theme = "hi-tech-geek"
+        # Enregistrer tous les thèmes pro
+        for theme_obj in self.THEMES_MAP.values():
+            self.register_theme(theme_obj)
+        self.theme = "claude-dark"
         self.current_theme_index = 0
 
     CSS = """
     Screen {
         layout: vertical;
         padding: 0;
-        background: #0D1117;
+        background: $background;
     }
 
     TopStatusBanner {
-        background: #161B22;
-        color: #00F0FF;
+        background: $surface;
+        color: $primary;
         border: none;
-        border-bottom: solid #21262D;
+        border-bottom: solid $panel;
         height: 3;
         content-align: center middle;
         padding: 0 2;
@@ -135,21 +209,21 @@ class SentinelApp(App):
 
     /* Panneaux sans encadrés : fond transparent/subtil avec bordure gauche d'accentuation */
     Static {
-        background: #0D1117;
+        background: $background;
         border: none;
-        border-left: solid #21262D;
+        border-left: solid $panel;
         padding: 0 1;
     }
 
     Static:focus {
-        border-left: solid #00F0FF;
+        border-left: solid $primary;
     }
 
     .pane-title {
-        color: #00F0FF;
+        color: $primary;
         text-style: bold;
         border: none;
-        border-bottom: solid #21262D;
+        border-bottom: solid $panel;
         margin-bottom: 1;
         padding-bottom: 0;
     }
@@ -162,25 +236,25 @@ class SentinelApp(App):
     }
 
     ProgressBar > .bar--bar {
-        color: #00F0FF;
-        background: #21262D;
+        color: $primary;
+        background: $panel;
     }
 
     ProgressBar > .bar--complete {
-        color: #00FF66;
+        color: $success;
     }
 
     /* Invite de commande type Claude Code / AGY sans encadré */
     AgentPromptBar {
         height: 3;
         padding: 0 2;
-        background: #161B22;
-        border-top: solid #21262D;
+        background: $surface;
+        border-top: solid $panel;
         align: left middle;
     }
 
     #prompt-symbol {
-        color: #00F0FF;
+        color: $primary;
         text-style: bold;
         width: 3;
         padding: 0;
@@ -192,7 +266,7 @@ class SentinelApp(App):
         width: 1fr;
         border: none;
         background: transparent;
-        color: #E6EDF3;
+        color: $foreground;
         padding: 0;
     }
 
@@ -242,11 +316,11 @@ class SentinelApp(App):
             pass
 
     def action_cycle_theme(self) -> None:
-        """Cycle dynamiquement entre les thèmes disponibles."""
+        """Cycle dynamiquement entre les thèmes agents de code."""
         self.current_theme_index = (self.current_theme_index + 1) % len(self.THEMES_CYCLE)
         new_theme = self.THEMES_CYCLE[self.current_theme_index]
         self.theme = new_theme
-        self.notify(f"🎨 Thème actif : [bold cyan]{new_theme}[/bold cyan]", title="Sélecteur de Thème")
+        self.notify(f"🎨 Thème actif : [bold primary]{new_theme}[/bold primary]", title="Agent Theme Switcher")
 
     def action_focus_chat(self) -> None:
         """Focus sur l'input du prompt agent."""
