@@ -1,5 +1,5 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Label, ProgressBar, Input
+from textual.widgets import Header, Footer, Static, Label, Input
 from textual.containers import Vertical, Grid, Horizontal, VerticalScroll
 from textual.theme import Theme
 
@@ -89,27 +89,24 @@ class TopStatusBanner(Static):
         yield Label("[bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
 
 class RootAgentPane(Static):
-    """Regroupement d'un agent racine et de ses sub-agents avec contexte et skills."""
+    """Orchestration directe et minimale des agents & sub-agents (Sans barres de progression ni fioritures)."""
     def compose(self) -> ComposeResult:
-        yield Label("❯ AGENT ORCHESTRATION & SESSION HEALTH", classes="pane-title")
+        yield Label("❯ AGENT ORCHESTRATION", classes="pane-title")
         
-        # Agent Racine
+        # Root Agent
         yield Label("[bold success][RUNNING][/bold success] [bold white]Claude Code[/bold white] [dim](Root Agent)[/dim]")
-        yield Label("   [dim]└─ Action:[/dim] [bold primary]Refactoring src/engine/board.py[/bold primary]  │  [dim]Elapsed:[/dim] [success]04m 12s[/success]")
-        yield Label("   [dim]└─ Context:[/dim] [bold primary]68%[/bold primary] [dim](136k / 200k tokens)[/dim]  │  [yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended")
-        pb1 = ProgressBar(total=100, show_eta=False, id="ctx-root")
-        pb1.progress = 68
-        yield pb1
-        yield Label("   [dim]└─ Skills & MCPs:[/dim] local-file-picker [bold success][ON][/bold success]  │  ast-grep [dim][OFF][/dim]  │  sqlite [bold success][ON][/bold success]\n")
+        yield Label(" ├─ Action: [bold primary]Refactoring src/engine/board.py[/bold primary]")
+        yield Label(" ├─ Context: [bold primary]68%[/bold primary] [dim](136k / 200k)[/dim]  [yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended")
+        yield Label(" ├─ Active Skills: [dim]local-file-picker, ast-grep-search, rag-local[/dim]")
+        yield Label(" └─ Active MCPs: [dim]sqlite, github, memory[/dim]\n")
 
-        # Sub-Agent dépendant
-        yield Label("   [dim]└─ ❯[/dim] [bold success][RUNNING][/bold success] [bold white]agy[/bold white] [dim](Sub-agent: Gemini 3.6 Flash)[/dim]")
-        yield Label("      [dim]└─ Action:[/dim] [bold primary]Writing unit tests for movegen.py[/bold primary]  │  [dim]Elapsed:[/dim] [success]01m 45s[/success]")
-        yield Label("      [dim]└─ Context:[/dim] [bold primary]24%[/bold primary] [dim](48k / 200k tokens)[/dim]")
-        pb2 = ProgressBar(total=100, show_eta=False, id="ctx-sub")
-        pb2.progress = 24
-        yield pb2
-        yield Label("      [dim]└─ Skills & MCPs:[/dim] pytest-runner [bold success][ON][/bold success]  │  playwright [dim][OFF][/dim]")
+        # Sub-Agents
+        yield Label(" └─ ❯ SUB-AGENTS")
+        yield Label("    [bold success][RUNNING][/bold success] [bold white]agy[/bold white]")
+        yield Label("    ├─ Model: [cyan]Gemini 3.6 Flash[/cyan]")
+        yield Label("    ├─ Action: [dim]Writing unit tests for movegen.py[/dim]")
+        yield Label("    ├─ Remaining Time: [bold success]~01m 30s[/bold success]")
+        yield Label("    └─ Tokens Used: [bold primary]48k[/bold primary] [dim](24%)[/dim]")
 
 class GitStatusPane(Static):
     """Statut Git épuré."""
@@ -154,7 +151,7 @@ class AgentPromptBar(Horizontal):
         yield Input(placeholder="Ask a question, run a command (/compact, /clear)...", id="chat-input")
 
 class SentinelApp(App):
-    """Application TUI Pro & Geek (Style Claude Code, Herdr & OpenCode)."""
+    """Application TUI Minimaliste & Directe (Sans barres de progression ni fioritures)."""
 
     TITLE = "Sentinel CLI"
     SUB_TITLE = "Terminal AI Watchdog"
@@ -222,22 +219,6 @@ class SentinelApp(App):
         border-bottom: solid $panel;
         margin-bottom: 1;
         padding-bottom: 0;
-    }
-
-    ProgressBar {
-        margin-top: 0;
-        margin-bottom: 1;
-        height: 1;
-        border: none;
-    }
-
-    ProgressBar > .bar--bar {
-        color: $primary;
-        background: $panel;
-    }
-
-    ProgressBar > .bar--complete {
-        color: $success;
     }
 
     AgentPromptBar {
