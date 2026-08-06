@@ -1,7 +1,9 @@
+from typing import List
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Label, Input
 from textual.containers import Vertical, Grid, Horizontal, VerticalScroll
 from textual.theme import Theme
+from sentinel.modules.agents import AgentInspector, AgentInfo
 
 # 1. Thème Claude Code Dark (Amber Chaud & Anthracite Pro)
 CLAUDE_DARK_THEME = Theme(
@@ -89,24 +91,35 @@ class TopStatusBanner(Static):
         yield Label("[bold primary]SENTINEL[/bold primary] [dim]v0.1.0[/dim]  │  [dim]Project:[/dim] [bold white]SENTINEL[/bold white]  │  [dim]Watchdog:[/dim] [bold success]Local x99 (Qwen 32B)[/bold success]", id="banner-text")
 
 class RootAgentPane(Static):
-    """Orchestration directe et minimale des agents & sub-agents (Sans barres de progression ni fioritures)."""
+    """Orchestration directe et minimale des agents & sub-agents en temps réel."""
     def compose(self) -> ComposeResult:
         yield Label("❯ AGENT ORCHESTRATION", classes="pane-title")
-        
-        # Root Agent
-        yield Label("[bold success][RUNNING][/bold success] [bold white]Claude Code[/bold white] [dim](Root Agent)[/dim]")
-        yield Label(" ├─ Action: [bold primary]Refactoring src/engine/board.py[/bold primary]")
-        yield Label(" ├─ Context: [bold primary]68%[/bold primary] [dim](136k / 200k)[/dim]  [yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended")
-        yield Label(" ├─ Active Skills: [dim]local-file-picker, ast-grep-search, rag-local[/dim]")
-        yield Label(" └─ Active MCPs: [dim]sqlite, github, memory[/dim]\n")
+        yield Vertical(id="agent-tree-content")
 
-        # Sub-Agents
-        yield Label(" └─ ❯ SUB-AGENTS")
-        yield Label("    [bold success][RUNNING][/bold success] [bold white]agy[/bold white]")
-        yield Label("    ├─ Model: [cyan]Gemini 3.6 Flash[/cyan]")
-        yield Label("    ├─ Action: [dim]Writing unit tests for movegen.py[/dim]")
-        yield Label("    ├─ Remaining Time: [bold success]~01m 30s[/bold success]")
-        yield Label("    └─ Tokens Used: [bold primary]48k[/bold primary] [dim](24%)[/dim]")
+    def update_agents(self, agents: List[AgentInfo]) -> None:
+        """Mise à jour dynamique de l'arborescence des agents."""
+        container = self.query_one("#agent-tree-content", Vertical)
+        container.remove_children()
+
+        root_agents = [a for a in agents if not a.is_subagent]
+        sub_agents = [a for a in agents if a.is_subagent]
+
+        for root in root_agents:
+            warn = "[yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended" if root.context_percent >= 60 else ""
+            container.mount(Label(f"[bold success][RUNNING][/bold success] [bold white]{root.name}[/bold white] [dim]({root.role})[/dim]"))
+            container.mount(Label(f" ├─ Action: [bold primary]{root.action}[/bold primary]"))
+            container.mount(Label(f" ├─ Context: [bold primary]{root.context_percent}%[/bold primary] [dim]({root.context_used // 1000}k / {root.context_max // 1000}k)[/dim]  {warn}"))
+            container.mount(Label(f" ├─ Active Skills: [dim]{', '.join(root.skills)}[/dim]"))
+            container.mount(Label(f" └─ Active MCPs: [dim]{', '.join(root.mcps)}[/dim]\n"))
+
+        if sub_agents:
+            container.mount(Label(" └─ ❯ SUB-AGENTS"))
+            for sub in sub_agents:
+                container.mount(Label(f"    [bold success][RUNNING][/bold success] [bold white]{sub.name}[/bold white]"))
+                container.mount(Label(f"    ├─ Model: [cyan]{sub.model}[/cyan]"))
+                container.mount(Label(f"    ├─ Action: [dim]{sub.action}[/dim]"))
+                container.mount(Label(f"    ├─ Remaining Time: [bold success]{sub.remaining_time}[/bold success]"))
+                container.mount(Label(f"    └─ Tokens Used: [bold primary]{sub.context_used // 1000}k[/bold primary] [dim]({sub.context_percent}%)[/dim]"))
 
 class GitStatusPane(Static):
     """Statut Git épuré."""
@@ -171,6 +184,7 @@ class SentinelApp(App):
             self.register_theme(theme_obj)
         self.theme = "claude-dark"
         self.current_theme_index = 0
+        self.inspector = AgentInspector()
 
     CSS = """
     Screen {
@@ -274,6 +288,20 @@ class SentinelApp(App):
 
         yield AgentPromptBar()
         yield Footer()
+
+    def on_mount(self) -> None:
+        """Initialise la détection en direct des agents et configure le rafraîchissement périodique."""
+        self.refresh_agents()
+        self.set_interval(2.0, self.refresh_agents)
+
+    def refresh_agents(self) -> None:
+        """Met à jour les données réelles des agents scannés."""
+        try:
+            agents = self.inspector.scan_active_agents()
+            root_pane = self.query_one(RootAgentPane)
+            root_pane.update_agents(agents)
+        except Exception:
+            pass
 
     def on_resize(self, event) -> None:
         try:
