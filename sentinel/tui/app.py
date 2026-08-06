@@ -113,7 +113,7 @@ class RootAgentPane(Static):
 
         for root in root_agents:
             warn = "[yellow][WARN][/yellow] [cyan]/compact[/cyan] recommended" if root.context_percent >= 60 else ""
-            container.mount(Label(f"[bold success][RUNNING][/bold success] [bold white]{root.name}[/bold white] [dim]({root.role})[/dim]"))
+            container.mount(Label(f"[bold success][RUNNING][/bold success] [bold white]{root.name}[/bold white] [dim]({root.model})[/dim]"))
             container.mount(Label(f" ├─ Action: [bold primary]{root.action}[/bold primary]"))
             container.mount(Label(f" ├─ Context: [bold primary]{root.context_percent}%[/bold primary] [dim]({root.context_used // 1000}k / {root.context_max // 1000}k)[/dim]  {warn}"))
             skills_str = ", ".join(root.skills) if root.skills else "aucun"
