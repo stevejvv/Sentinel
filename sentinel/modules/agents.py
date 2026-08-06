@@ -71,6 +71,23 @@ class AgentInspector:
             pass
         return None
 
+    def _find_claude_project_dir(self, cwd: str) -> Optional[Path]:
+        """Trouve le dossier de projet Claude correspondant au répertoire courant."""
+        projects_dir = CLAUDE_CLI_DIR / "projects"
+        if not projects_dir.exists():
+            return None
+
+        encoded_exact = cwd.replace("/", "-")
+        exact_dir = projects_dir / encoded_exact
+        if exact_dir.exists():
+            return exact_dir
+
+        cwd_name = Path(cwd).name.lower()
+        for p in projects_dir.iterdir():
+            if p.is_dir() and cwd_name in p.name.lower():
+                return p
+        return None
+
     def _get_agy_skills(self) -> List[str]:
         """Scanne dynamiquement les vrais skills installés pour AGY."""
         skills: List[str] = []
@@ -95,7 +112,6 @@ class AgentInspector:
         if proj_skills_dir.exists():
             raw_skills.extend([s.name for s in proj_skills_dir.iterdir() if not s.name.startswith(".")])
 
-        # Normaliser / dédupliquer les préfixes de sous-skills (ex: caveman-help -> caveman)
         cleaned_skills = []
         for s in raw_skills:
             base_name = s.split("-")[0] if "-" in s else s
@@ -134,12 +150,12 @@ class AgentInspector:
         return list(dict.fromkeys(mcps))
 
     def _parse_agy_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
-        """Extrait les vraies données de la session AGY."""
+        """Extrait les vraies données de la session AGY sans aucune valeur stimulée."""
         agents: List[AgentInfo] = []
         transcript_path = self._get_latest_agy_transcript()
 
         last_user_request = "Session active"
-        estimated_tokens = 20000
+        estimated_tokens = 0
         active_subagents: List[AgentInfo] = []
         model_name = "Gemini 3.6 Flash (High)"
 
@@ -149,7 +165,7 @@ class AgentInspector:
         if transcript_path and transcript_path.exists():
             try:
                 file_size = transcript_path.stat().st_size
-                estimated_tokens = max(2000, file_size // 4)
+                estimated_tokens = file_size // 4
 
                 with open(transcript_path, "r", encoding="utf-8") as f:
                     for line in f:
@@ -229,18 +245,17 @@ class AgentInspector:
     def _parse_claude_session(self, pid: int, elapsed_seconds: float, cwd: str) -> List[AgentInfo]:
         """Extrait les vraies données de contexte, skills et MCPs d'une session Claude Code."""
         agents: List[AgentInfo] = []
-        last_user_request = "Active CLI Session"
+        last_user_request = "Session active"
         input_tokens = 0
         output_tokens = 0
         used_tools = set()
 
-        encoded_cwd = cwd.replace("/", "-")
-        claude_proj_dir = CLAUDE_CLI_DIR / "projects" / encoded_cwd
+        claude_proj_dir = self._find_claude_project_dir(cwd)
 
         skills = self._get_claude_skills(cwd)
         configured_mcps = self._get_claude_mcps(cwd)
 
-        if claude_proj_dir.exists():
+        if claude_proj_dir and claude_proj_dir.exists():
             jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
             if jsonl_files:
                 latest_jsonl = max(jsonl_files, key=lambda p: p.stat().st_mtime)
@@ -251,7 +266,6 @@ class AgentInspector:
                                 continue
                             try:
                                 data = json.loads(line)
-                                # Extraire le prompt utilisateur
                                 if data.get("type") == "user" and "message" in data:
                                     content = data["message"].get("content", "")
                                     if isinstance(content, str) and content.strip():
@@ -271,12 +285,11 @@ class AgentInspector:
                                                     last_user_request = txt.split("\n")[0]
                                                     break
 
-                                # Extraire les tokens d'assistant et les outils engagés
                                 if data.get("type") == "assistant" and "message" in data:
                                     msg = data["message"]
                                     usage = msg.get("usage", {})
                                     if usage.get("input_tokens"):
-                                        input_tokens = max(input_tokens, usage.get("input_tokens", 0))
+                                        input_tokens = usage.get("input_tokens", 0)
                                     output_tokens += usage.get("output_tokens", 0)
 
                                     for item in msg.get("content", []):
@@ -288,14 +301,10 @@ class AgentInspector:
                     pass
 
         total_context_tokens = input_tokens + output_tokens
-        if total_context_tokens == 0:
-            # Fallback direct basé sur la taille du fichier si les tokens ne sont pas dans le JSONL
-            if claude_proj_dir.exists():
-                jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
-                if jsonl_files:
-                    total_context_tokens = max(1000, max(f.stat().st_size for f in jsonl_files) // 4)
-            else:
-                total_context_tokens = 5000
+        if total_context_tokens == 0 and claude_proj_dir and claude_proj_dir.exists():
+            jsonl_files = list(claude_proj_dir.glob("*.jsonl"))
+            if jsonl_files:
+                total_context_tokens = max(f.stat().st_size for f in jsonl_files) // 4
 
         if len(last_user_request) > 60:
             last_user_request = last_user_request[:57] + "..."
@@ -343,7 +352,6 @@ class AgentInspector:
                     if proc_cwd != target_dir and target_dir not in proc_cwd.parents:
                         continue
 
-                    # Ignorer les sous-processus python/node secondaires de Claude ou AGY
                     if (pname == "python" or pname == "python3" or pname == "node") and ("claude" not in cmd_str and "agy" not in cmd_str):
                         continue
 
